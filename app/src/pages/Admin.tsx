@@ -132,12 +132,18 @@ const Admin = () => {
     try {
       const res = await fetch(`${API_URL}/admin/users/${userId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       if (res.ok) {
-        toast.success('User deleted');
+        toast.success('User deleted successfully');
         fetchUsers();
         fetchStats();
+      } else {
+        const data = await res.json().catch(() => ({ message: 'Failed to delete user' }));
+        toast.error(data.message || 'Failed to delete user');
       }
     } catch (error) {
       toast.error('Failed to delete user');

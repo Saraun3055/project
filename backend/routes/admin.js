@@ -2,6 +2,8 @@ import express from 'express';
 import User from '../models/User.js';
 import NFT from '../models/NFT.js';
 import Collection from '../models/Collection.js';
+import Offer from '../models/Offer.js';
+import Activity from '../models/Activity.js';
 import { protect, isAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -83,7 +85,17 @@ router.delete('/users/:id', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     
+    const userNFTs = await NFT.find({ creator: req.params.id });
+    const nftIds = userNFTs.map(nft => nft._id);
+    
     await NFT.deleteMany({ owner: req.params.id });
+    await NFT.deleteMany({ creator: req.params.id });
+    await Collection.deleteMany({ creator: req.params.id });
+    await Offer.deleteMany({ buyer: req.params.id });
+    await Offer.deleteMany({ nft: { $in: nftIds } });
+    await Activity.deleteMany({ from: req.params.id });
+    await Activity.deleteMany({ to: req.params.id });
+    await Activity.deleteMany({ nft: { $in: nftIds } });
     
     res.json({ message: 'User deleted successfully' });
   } catch (error) {

@@ -179,7 +179,7 @@ const NFTDetail = () => {
         setShowBuyDialog(false);
         window.location.reload();
       } else {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({ message: 'Failed to purchase NFT' }));
         alert(data.message || 'Failed to purchase NFT');
       }
     } catch (error) {
@@ -223,7 +223,7 @@ const NFTDetail = () => {
         setShowOfferDialog(false);
         setOfferAmount('');
       } else {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({ message: 'Failed to submit offer' }));
         alert(data.message || 'Failed to submit offer');
       }
     } catch (error) {
@@ -279,7 +279,7 @@ const NFTDetail = () => {
         setListPrice('');
         window.location.reload();
       } else {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({ message: 'Failed to list NFT' }));
         alert(data.message || 'Failed to list NFT');
       }
     } catch (error) {

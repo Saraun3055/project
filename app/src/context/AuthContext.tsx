@@ -85,11 +85,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: JSON.stringify({ email, password })
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
+      const data = await response.json().catch(() => ({ message: 'Login failed' }));
       throw new Error(data.message || 'Login failed');
     }
+
+    const data = await response.json();
 
     localStorage.setItem('nexus_token', data.token);
     setToken(data.token);
@@ -107,11 +108,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: JSON.stringify({ username, email, password })
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
+      const data = await response.json().catch(() => ({ message: 'Signup failed' }));
       throw new Error(data.message || 'Signup failed');
     }
+
+    const data = await response.json();
 
     localStorage.setItem('nexus_token', data.token);
     setToken(data.token);

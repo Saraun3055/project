@@ -130,11 +130,12 @@ const Create = () => {
         body: formData
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const data = await response.json().catch(() => ({ message: 'Failed to create NFT' }));
         throw new Error(data.message || 'Failed to create NFT');
       }
+
+      const data = await response.json();
 
       toast.success('NFT created successfully!');
       navigate('/profile');
