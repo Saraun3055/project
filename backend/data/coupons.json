@@ -1,0 +1,35 @@
+[
+  {
+    "id": "cpn1",
+    "code": "WELCOME50",
+    "description": "50% off up to ₹100",
+    "discountType": "percent",
+    "discountValue": 50,
+    "minOrderValue": 149,
+    "maxDiscount": 100
+  },
+  {
+    "id": "cpn2",
+    "code": "FLAT150",
+    "description": "Flat ₹150 off on ₹499+",
+    "discountType": "flat",
+    "discountValue": 150,
+    "minOrderValue": 499
+  },
+  {
+    "id": "cpn3",
+    "code": "PARTY300",
+    "description": "Flat ₹300 off on ₹999+",
+    "discountType": "flat",
+    "discountValue": 300,
+    "minOrderValue": 999
+  },
+  {
+    "id": "cpn4",
+    "code": "FREEDEL",
+    "description": "Free Delivery on ₹299+",
+    "discountType": "free_delivery",
+    "discountValue": 0,
+    "minOrderValue": 299
+  }
+]

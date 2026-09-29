@@ -1,15 +1,22 @@
-﻿import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider, useDispatch, useSelector } from 'react-redux';
 import { store, RootState } from './src/store';
-import { setUserLogin, clearUserLogin, updateUserProfile } from './src/store/userSlice';
+import { setUserLogin, clearUserLogin, updateUserProfile, restoreAddresses } from './src/store/userSlice';
 import { recordPurchase, updateHealthMeter, resetProgress } from './src/store/progressSlice';
 import { reduxAddToCart, reduxClearCart } from './src/store/cartSlice';
 import { NavigationProvider, useNavigation } from './src/navigation/Navigation';
 import { UserProvider, useUser } from './src/context/UserContext';
 import { CartProvider, useCart } from './src/context/CartContext';
-import { getStoredToken, simulateLogout } from './src/utils/authService';
+import {
+  getStoredRestaurantSession,
+  getStoredToken,
+  restaurantLogout,
+  simulateLogin,
+  simulateLogout,
+  type RestaurantSession,
+} from './src/utils/authService';
 import { clearSessionStorage, getStoredJson, saveStoredJson, STORAGE_KEYS } from './src/utils/storage';
 import { SplashScreen } from './src/screens/SplashScreen';
 
@@ -26,6 +33,8 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OrderTrackingScreen } from './src/screens/OrderTrackingScreen';
 import { MenuScreen } from './src/screens/MenuScreen';
 import { RestaurantsScreen } from './src/screens/RestaurantsScreen';
+import { RestaurantLoginScreen } from './src/screens/RestaurantLoginScreen';
+import { RestaurantDashboardScreen } from './src/screens/RestaurantDashboardScreen';
 import { DrawerPanel } from './src/components/DrawerPanel';
 import { Dish, ComboMeal } from './src/data/mockData';
 import { HomeIcon, CartIcon, ProfileIcon } from './src/components/Icons';
@@ -66,19 +75,47 @@ function AppContent() {
 
   // Context hooks
   const { user, login, logout } = useUser();
-  const { cartItems, addToCart, clearCart, setSelectedCuisine, setSearchQuery, finalTotal, discountAmount, bestCoupon } = useCart();
+  const { cartItems, addToCart, clearCart, resetSessionState, finalTotal, discountAmount, bestCoupon } = useCart();
 
   const [isSessionRestored, setIsSessionRestored] = useState(false);
+  const [isSessionInitialized, setIsSessionInitialized] = useState(false);
+  const [restaurantSession, setRestaurantSession] = useState<RestaurantSession | null>(null);
 
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const token = await getStoredToken();
-        if (token) {
-          const simulatedEmail = 'user@foodexpress.com';
-          login(simulatedEmail);
-          dispatch(setUserLogin(simulatedEmail));
+        const session = await getStoredToken();
+        const storedRestaurantSession = await getStoredRestaurantSession();
+        if (storedRestaurantSession) {
+          setRestaurantSession(storedRestaurantSession);
+          setIsSessionRestored(false);
+        } else if (session) {
+          dispatch(setUserLogin(session.email));
+          void login(session.email);
           setIsSessionRestored(true);
+        } else {
+          dispatch(clearUserLogin());
+          resetSessionState();
+          setIsSessionRestored(false);
+        }
+
+        const customerSession = storedRestaurantSession ? null : session;
+        const savedProfile = await getStoredJson<{name: string; phone: string; email: string} | null>(
+          STORAGE_KEYS.userProfile, null
+        );
+        if (
+          customerSession &&
+          savedProfile &&
+          savedProfile.email.trim().toLowerCase() === customerSession.email.trim().toLowerCase()
+        ) {
+          dispatch(updateUserProfile(savedProfile));
+        }
+
+        const savedAddresses = await getStoredJson<{addresses: any[]; selectedAddressId: string | null} | null>(
+          STORAGE_KEYS.userAddresses, null
+        );
+        if (customerSession && savedAddresses && savedAddresses.addresses?.length > 0) {
+          dispatch(restoreAddresses(savedAddresses));
         }
 
         const savedHealthMeter = await getStoredJson<number>(STORAGE_KEYS.healthMeter, progressState.healthMeterInput);
@@ -87,22 +124,56 @@ function AppContent() {
         }
       } catch (e) {
         console.error('Session restore failed:', e);
+        setIsSessionRestored(false);
+      } finally {
+        setIsSessionInitialized(true);
       }
     };
-    restoreSession();
+    void restoreSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (isSessionInitialized && currentScreen === 'splash') {
+      if (restaurantSession) {
+        navigate('restaurantDashboard', { restaurantId: restaurantSession.restaurantId });
+      } else {
+        navigate(isSessionRestored ? 'home' : 'login');
+      }
+    }
+  }, [currentScreen, isSessionInitialized, isSessionRestored, navigate, restaurantSession]);
 
   useEffect(() => {
     saveStoredJson(STORAGE_KEYS.healthMeter, progressState.healthMeterInput);
   }, [progressState.healthMeterInput]);
 
-  const handleAutoTransition = () => {
-    if (isSessionRestored) {
-      navigate('home');
-    } else {
-      navigate('login');
+  // Auto-save profile to AsyncStorage whenever Redux user state changes
+  useEffect(() => {
+    if (isSessionInitialized && reduxUser.isLoggedIn && reduxUser.email) {
+      saveStoredJson(STORAGE_KEYS.userProfile, {
+        name: reduxUser.name,
+        email: reduxUser.email,
+        phone: reduxUser.phone,
+      });
     }
+  }, [isSessionInitialized, reduxUser.email, reduxUser.isLoggedIn, reduxUser.name, reduxUser.phone]);
+
+  useEffect(() => {
+    if (isSessionInitialized && reduxUser.isLoggedIn && reduxUser.email) {
+      saveStoredJson(STORAGE_KEYS.userAddresses, {
+        addresses: reduxUser.addresses,
+        selectedAddressId: reduxUser.selectedAddressId,
+      });
+    }
+  }, [isSessionInitialized, reduxUser.addresses, reduxUser.email, reduxUser.isLoggedIn, reduxUser.selectedAddressId]);
+
+  const handleAutoTransition = () => {
+    if (!isSessionInitialized) return;
+    if (restaurantSession) {
+      navigate('restaurantDashboard', { restaurantId: restaurantSession.restaurantId });
+      return;
+    }
+    navigate(isSessionRestored ? 'home' : 'login');
   };
 
   // Calculate dynamic deal value score & update Redux
@@ -186,14 +257,19 @@ const handlePlaceOrder = () => {
     await simulateLogout();
     await clearSessionStorage();
     Alert.alert('Logged Out ðŸšª', 'You have been logged out successfully.');
-    logout();
-    clearCart();
-    setSelectedCuisine(null);
-    setSearchQuery('');
+    await logout();
+    resetSessionState();
     dispatch(clearUserLogin());
     setHasActiveOrder(false);
     dispatch(resetProgress());
     navigate('login');
+  };
+
+  const handleRestaurantLogout = async () => {
+    await restaurantLogout();
+    setRestaurantSession(null);
+    setIsSessionRestored(false);
+    navigate('restaurantLogin');
   };
 
   const renderActiveScreen = () => {
@@ -204,25 +280,29 @@ const handlePlaceOrder = () => {
         return (
           <LoginScreen
             onLoginSuccess={(email) => {
-              login(email);
-              dispatch(setUserLogin(email));
+              const normalizedEmail = email.trim().toLowerCase();
+              dispatch(setUserLogin(normalizedEmail));
+              void login(normalizedEmail);
               navigate('home');
             }}
             onSkip={() => navigate('home')}
             onSignUp={() => navigate('register')}
+            onRestaurantLogin={() => navigate('restaurantLogin')}
           />
         );
       case 'register':
         return (
           <RegisterScreen
-            onRegisterSuccess={(data) => {
+            onRegisterSuccess={async (data) => {
+              const normalizedEmail = data.email.trim().toLowerCase();
               dispatch(updateUserProfile({
                 name: data.fullName,
-                email: data.email,
+                email: normalizedEmail,
                 phone: data.mobileNumber,
-                address: data.address,
               }));
-              dispatch(setUserLogin(data.email));
+              dispatch(setUserLogin(normalizedEmail));
+              await simulateLogin(normalizedEmail, data.password);
+              void login(normalizedEmail);
               navigate('home');
             }}
             onBack={goBack}
@@ -236,9 +316,10 @@ const handlePlaceOrder = () => {
             onAddComboToCart={handleAddComboToCart}
             cartCount={cartCount}
             dietScore={dietScore}
-            onNavigateToCart={() => navigate('cart')}
-            onNavigateToProfile={() => navigate('profile')}
-            onOpenDrawer={openDrawer}
+             onNavigateToCart={() => navigate('cart')}
+             onNavigateToProfile={() => navigate('profile')}
+             onNavigateToRestaurants={(query) => navigate('restaurants', { searchQuery: query })}
+             onOpenDrawer={openDrawer}
           />
         );
       case 'details':
@@ -280,8 +361,8 @@ case 'checkout':
           <ProfileScreen
             userEmail={reduxUser.email || user?.email || ''}
             userName={reduxUser.name || 'Gourmet Explorer'}
-            userPhone={reduxUser.phone || '+91 98765 43210'}
-            userAddress={reduxUser.address || 'Flat 402, Springdale Apartments, Indiranagar, Bengaluru - 560038'}
+            userPhone={reduxUser.phone ?? '+91 98765 43210'}
+            userAddress={''}
             pastOrders={[]} // past orders calculated via Redux or custom list hooks
             onBack={goBack}
             onLogout={handleLogout}
@@ -309,10 +390,6 @@ case 'checkout':
       case 'address':
         return (
           <AddressScreen
-            onSave={(addressStr) => {
-              dispatch(updateUserProfile({ address: addressStr }));
-              navigate('profile');
-            }}
             onBack={goBack}
           />
         );
@@ -323,8 +400,14 @@ case 'checkout':
             onBack={goBack}
           />
         );
-      case 'restaurants':
-        return <RestaurantsScreen onAddToCart={handleAddToCart} onNavigateToCart={() => navigate('cart')} />;
+       case 'restaurants':
+         return (
+           <RestaurantsScreen
+             onAddToCart={handleAddToCart}
+             onNavigateToCart={() => navigate('cart')}
+             initialSearchQuery={(currentParams?.searchQuery as string | undefined) ?? ''}
+           />
+         );
       case 'menu':
         return (
           <MenuScreen
@@ -334,6 +417,24 @@ case 'checkout':
         );
       case 'tracking':
         return <OrderTrackingScreen hasActiveOrder={hasActiveOrder} onBackToHome={() => navigate('home')} />;
+      case 'restaurantLogin':
+        return (
+          <RestaurantLoginScreen
+            onLoginSuccess={async (restId) => {
+              const savedSession = await getStoredRestaurantSession();
+              setRestaurantSession(savedSession);
+              navigate('restaurantDashboard', { restaurantId: restId });
+            }}
+            onBack={goBack}
+          />
+        );
+      case 'restaurantDashboard':
+        return (
+          <RestaurantDashboardScreen
+            restaurantId={currentParams?.restaurantId || 'rest_01'}
+            onLogout={handleRestaurantLogout}
+          />
+        );
       default:
         return <SplashScreen onAutoTransition={() => navigate('login')} />;
     }

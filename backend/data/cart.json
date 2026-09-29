@@ -3,18 +3,30 @@
   "items": [
     {
       "dishId": "d1",
+      "restaurantId": "rest1",
+      "restaurantName": "Mehfil Grand",
       "name": "Butter Chicken Masala",
       "quantity": 1,
       "price": 349
     },
     {
-      "dishId": "d4",
+      "dishId": "d5",
+      "restaurantId": "rest5",
+      "restaurantName": "Pizzeria Roma",
       "name": "Margherita Pizza",
       "quantity": 2,
       "price": 299
     }
   ],
   "subtotal": 947,
-  "deliveryFee": 40,
-  "total": 987
+  "deliveryFee": 80,
+  "deliveryFeePerRestaurant": 40,
+  "total": 1027,
+  "appliedCoupon": {
+    "id": "cpn3",
+    "code": "PARTY300",
+    "description": "Flat ₹300 off on ₹999+"
+  },
+  "discount": 300,
+  "finalTotal": 727
 }

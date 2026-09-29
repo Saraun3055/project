@@ -1,18 +1,225 @@
 [
   {
-    "id": "ord-1001",
+    "orderId": "txn-seed-delivered-rest1",
+    "transactionId": "txn-seed-delivered",
     "customerId": "u1",
-    "status": "Delivered",
-    "total": 987,
-    "items": ["Butter Chicken Masala", "Margherita Pizza"],
-    "date": "2026-09-10"
+    "customerName": "Aarav Sharma",
+    "restaurantId": "rest1",
+    "restaurantName": "Mehfil Grand",
+    "coordinates": {
+      "lat": 12.9784,
+      "lng": 77.6408
+    },
+    "items": [
+      {
+        "dishId": "d1",
+        "name": "Butter Chicken Masala",
+        "price": 349,
+        "quantity": 1,
+        "lineTotal": 349
+      }
+    ],
+    "subtotal": 349,
+    "discountShare": 0,
+    "deliveryFeeShare": 29,
+    "commissionRate": 0.12,
+    "commissionAmount": 42,
+    "payoutAmount": 307,
+    "transferId": "tr_sim_txn-seed-delivered_rest1",
+    "paymentIntentId": "pi_sim_txn-seed-delivered",
+    "status": "Placed",
+    "prepMinutes": 20,
+    "defaultPrepMinutes": 20,
+    "acceptedAt": "2026-09-25T09:43:41.592Z",
+    "declinedAt": null,
+    "placedAt": "2026-09-25T09:41:41.592Z",
+    "date": "2026-09-25"
   },
   {
-    "id": "ord-1002",
+    "orderId": "txn-seed-delivered-rest5",
+    "transactionId": "txn-seed-delivered",
     "customerId": "u1",
-    "status": "In Transit",
-    "total": 449,
-    "items": ["Paneer Tikka Roll"],
-    "date": "2026-09-11"
+    "customerName": "Aarav Sharma",
+    "restaurantId": "rest5",
+    "restaurantName": "Pizzeria Roma",
+    "coordinates": {
+      "lat": 12.9719,
+      "lng": 77.6412
+    },
+    "items": [
+      {
+        "dishId": "d5",
+        "name": "Margherita Pizza",
+        "price": 299,
+        "quantity": 2,
+        "lineTotal": 598
+      }
+    ],
+    "subtotal": 598,
+    "discountShare": 0,
+    "deliveryFeeShare": 51,
+    "commissionRate": 0.14,
+    "commissionAmount": 84,
+    "payoutAmount": 514,
+    "transferId": "tr_sim_txn-seed-delivered_rest5",
+    "paymentIntentId": "pi_sim_txn-seed-delivered",
+    "status": "Placed",
+    "prepMinutes": 25,
+    "defaultPrepMinutes": 25,
+    "acceptedAt": "2026-09-25T09:43:41.592Z",
+    "declinedAt": null,
+    "placedAt": "2026-09-25T09:41:41.592Z",
+    "date": "2026-09-25"
+  },
+  {
+    "orderId": "txn-seed-in-transit-rest2",
+    "transactionId": "txn-seed-in-transit",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "restaurantId": "rest2",
+    "restaurantName": "Kathi Zone",
+    "coordinates": {
+      "lat": 12.9352,
+      "lng": 77.6245
+    },
+    "items": [
+      {
+        "dishId": "d2",
+        "name": "Paneer Tikka Roll",
+        "price": 189,
+        "quantity": 2,
+        "lineTotal": 378
+      },
+      {
+        "dishId": "d8",
+        "name": "Crispy French Fries",
+        "price": 129,
+        "quantity": 1,
+        "lineTotal": 129
+      }
+    ],
+    "subtotal": 507,
+    "discountShare": 0,
+    "deliveryFeeShare": 54,
+    "commissionRate": 0.1,
+    "commissionAmount": 51,
+    "payoutAmount": 456,
+    "transferId": "tr_sim_txn-seed-in-transit_rest2",
+    "paymentIntentId": "pi_sim_txn-seed-in-transit",
+    "status": "Placed",
+    "prepMinutes": 14,
+    "defaultPrepMinutes": 15,
+    "acceptedAt": "2026-09-25T11:04:41.594Z",
+    "declinedAt": null,
+    "placedAt": "2026-09-25T11:02:41.594Z",
+    "date": "2026-09-25"
+  },
+  {
+    "orderId": "txn-seed-in-transit-rest7",
+    "transactionId": "txn-seed-in-transit",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "restaurantId": "rest7",
+    "restaurantName": "Burger Club",
+    "coordinates": {
+      "lat": 12.9756,
+      "lng": 77.6068
+    },
+    "items": [
+      {
+        "dishId": "d7",
+        "name": "Double Cheese Burger",
+        "price": 249,
+        "quantity": 1,
+        "lineTotal": 249
+      }
+    ],
+    "subtotal": 249,
+    "discountShare": 0,
+    "deliveryFeeShare": 26,
+    "commissionRate": 0.1,
+    "commissionAmount": 25,
+    "payoutAmount": 224,
+    "transferId": "tr_sim_txn-seed-in-transit_rest7",
+    "paymentIntentId": "pi_sim_txn-seed-in-transit",
+    "status": "Placed",
+    "prepMinutes": 10,
+    "defaultPrepMinutes": 12,
+    "acceptedAt": "2026-09-25T11:04:41.594Z",
+    "declinedAt": null,
+    "placedAt": "2026-09-25T11:02:41.594Z",
+    "date": "2026-09-25"
+  },
+  {
+    "orderId": "txn-seed-fresh-rest3",
+    "transactionId": "txn-seed-fresh",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "restaurantId": "rest3",
+    "restaurantName": "Noodle Bar",
+    "coordinates": {
+      "lat": 12.9116,
+      "lng": 77.6474
+    },
+    "items": [
+      {
+        "dishId": "d3",
+        "name": "Szechuan Noodles",
+        "price": 229,
+        "quantity": 1,
+        "lineTotal": 229
+      }
+    ],
+    "subtotal": 229,
+    "discountShare": 0,
+    "deliveryFeeShare": 47,
+    "commissionRate": 0.12,
+    "commissionAmount": 27,
+    "payoutAmount": 202,
+    "transferId": "tr_sim_txn-seed-fresh_rest3",
+    "paymentIntentId": "pi_sim_txn-seed-fresh",
+    "status": "Placed",
+    "prepMinutes": 18,
+    "defaultPrepMinutes": 18,
+    "acceptedAt": "2026-09-25T11:13:17.594Z",
+    "declinedAt": null,
+    "placedAt": "2026-09-25T11:11:17.594Z",
+    "date": "2026-09-25"
+  },
+  {
+    "orderId": "txn-seed-fresh-rest8",
+    "transactionId": "txn-seed-fresh",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "restaurantId": "rest8",
+    "restaurantName": "Dessert Heaven",
+    "coordinates": {
+      "lat": 12.9698,
+      "lng": 77.706
+    },
+    "items": [
+      {
+        "dishId": "d9",
+        "name": "Chocolate Lava Cake",
+        "price": 159,
+        "quantity": 1,
+        "lineTotal": 159
+      }
+    ],
+    "subtotal": 159,
+    "discountShare": 0,
+    "deliveryFeeShare": 33,
+    "commissionRate": 0.11,
+    "commissionAmount": 17,
+    "payoutAmount": 142,
+    "transferId": "tr_sim_txn-seed-fresh_rest8",
+    "paymentIntentId": "pi_sim_txn-seed-fresh",
+    "status": "Placed",
+    "prepMinutes": 14,
+    "defaultPrepMinutes": 14,
+    "acceptedAt": "2026-09-25T11:13:17.594Z",
+    "declinedAt": null,
+    "placedAt": "2026-09-25T11:11:17.594Z",
+    "date": "2026-09-25"
   }
 ]

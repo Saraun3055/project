@@ -1,0 +1,254 @@
+[
+  {
+    "transactionId": "txn-seed-delivered",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "customerAddress": {
+      "label": "Flat 402, Springdale Apartments, Indiranagar, Bengaluru - 560038",
+      "coordinates": {
+        "lat": 12.9716,
+        "lng": 77.6412
+      }
+    },
+    "placedAt": "2026-09-25T09:41:41.592Z",
+    "simulationStartedAt": "2026-09-25T09:41:41.592Z",
+    "timeScale": 1,
+    "orderIds": [
+      "txn-seed-delivered-rest1",
+      "txn-seed-delivered-rest5"
+    ],
+    "payment": {
+      "paymentIntentId": "pi_sim_txn-seed-delivered",
+      "transferGroup": "ORDER_txn-seed-delivered",
+      "mode": "simulated",
+      "status": "succeeded",
+      "currency": "inr",
+      "chargedAmount": 1027,
+      "subtotal": 947,
+      "deliveryFee": 80,
+      "discount": 0,
+      "platformTotal": 206,
+      "reconciled": true,
+      "splits": [
+        {
+          "restaurantId": "rest1",
+          "restaurantName": "Mehfil Grand",
+          "stripeAccountId": "acct_demo_mehfilgrand",
+          "currency": "inr",
+          "foodSubtotal": 349,
+          "discountShare": 0,
+          "deliveryFeeShare": 29,
+          "netFoodAmount": 349,
+          "commissionRate": 0.12,
+          "commissionAmount": 42,
+          "transferAmount": 307,
+          "restaurantPayout": 307,
+          "platformRevenue": 71,
+          "transferId": "tr_sim_txn-seed-delivered_rest1",
+          "transferStatus": "paid"
+        },
+        {
+          "restaurantId": "rest5",
+          "restaurantName": "Pizzeria Roma",
+          "stripeAccountId": "acct_demo_pizzeriaroma",
+          "currency": "inr",
+          "foodSubtotal": 598,
+          "discountShare": 0,
+          "deliveryFeeShare": 51,
+          "netFoodAmount": 598,
+          "commissionRate": 0.14,
+          "commissionAmount": 84,
+          "transferAmount": 514,
+          "restaurantPayout": 514,
+          "platformRevenue": 135,
+          "transferId": "tr_sim_txn-seed-delivered_rest5",
+          "transferStatus": "paid"
+        }
+      ],
+      "transfers": [
+        {
+          "transferId": "tr_sim_txn-seed-delivered_rest1",
+          "restaurantId": "rest1",
+          "stripeAccountId": "acct_demo_mehfilgrand",
+          "amount": 307,
+          "amountMinor": 30700
+        },
+        {
+          "transferId": "tr_sim_txn-seed-delivered_rest5",
+          "restaurantId": "rest5",
+          "stripeAccountId": "acct_demo_pizzeriaroma",
+          "amount": 514,
+          "amountMinor": 51400
+        }
+      ]
+    }
+  },
+  {
+    "transactionId": "txn-seed-in-transit",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "customerAddress": {
+      "label": "Flat 402, Springdale Apartments, Indiranagar, Bengaluru - 560038",
+      "coordinates": {
+        "lat": 12.9716,
+        "lng": 77.6412
+      }
+    },
+    "placedAt": "2026-09-25T11:02:41.594Z",
+    "simulationStartedAt": "2026-09-25T11:02:41.594Z",
+    "timeScale": 1,
+    "orderIds": [
+      "txn-seed-in-transit-rest2",
+      "txn-seed-in-transit-rest7"
+    ],
+    "payment": {
+      "paymentIntentId": "pi_sim_txn-seed-in-transit",
+      "transferGroup": "ORDER_txn-seed-in-transit",
+      "mode": "simulated",
+      "status": "succeeded",
+      "currency": "inr",
+      "chargedAmount": 836,
+      "subtotal": 756,
+      "deliveryFee": 80,
+      "discount": 0,
+      "platformTotal": 156,
+      "reconciled": true,
+      "splits": [
+        {
+          "restaurantId": "rest2",
+          "restaurantName": "Kathi Zone",
+          "stripeAccountId": "acct_demo_kathizone",
+          "currency": "inr",
+          "foodSubtotal": 507,
+          "discountShare": 0,
+          "deliveryFeeShare": 54,
+          "netFoodAmount": 507,
+          "commissionRate": 0.1,
+          "commissionAmount": 51,
+          "transferAmount": 456,
+          "restaurantPayout": 456,
+          "platformRevenue": 105,
+          "transferId": "tr_sim_txn-seed-in-transit_rest2",
+          "transferStatus": "paid"
+        },
+        {
+          "restaurantId": "rest7",
+          "restaurantName": "Burger Club",
+          "stripeAccountId": "acct_demo_burgerclub",
+          "currency": "inr",
+          "foodSubtotal": 249,
+          "discountShare": 0,
+          "deliveryFeeShare": 26,
+          "netFoodAmount": 249,
+          "commissionRate": 0.1,
+          "commissionAmount": 25,
+          "transferAmount": 224,
+          "restaurantPayout": 224,
+          "platformRevenue": 51,
+          "transferId": "tr_sim_txn-seed-in-transit_rest7",
+          "transferStatus": "paid"
+        }
+      ],
+      "transfers": [
+        {
+          "transferId": "tr_sim_txn-seed-in-transit_rest2",
+          "restaurantId": "rest2",
+          "stripeAccountId": "acct_demo_kathizone",
+          "amount": 456,
+          "amountMinor": 45600
+        },
+        {
+          "transferId": "tr_sim_txn-seed-in-transit_rest7",
+          "restaurantId": "rest7",
+          "stripeAccountId": "acct_demo_burgerclub",
+          "amount": 224,
+          "amountMinor": 22400
+        }
+      ]
+    }
+  },
+  {
+    "transactionId": "txn-seed-fresh",
+    "customerId": "u1",
+    "customerName": "Aarav Sharma",
+    "customerAddress": {
+      "label": "Flat 402, Springdale Apartments, Indiranagar, Bengaluru - 560038",
+      "coordinates": {
+        "lat": 12.9716,
+        "lng": 77.6412
+      }
+    },
+    "placedAt": "2026-09-25T11:11:17.594Z",
+    "simulationStartedAt": "2026-09-25T11:11:17.594Z",
+    "timeScale": 1,
+    "orderIds": [
+      "txn-seed-fresh-rest3",
+      "txn-seed-fresh-rest8"
+    ],
+    "payment": {
+      "paymentIntentId": "pi_sim_txn-seed-fresh",
+      "transferGroup": "ORDER_txn-seed-fresh",
+      "mode": "simulated",
+      "status": "succeeded",
+      "currency": "inr",
+      "chargedAmount": 468,
+      "subtotal": 388,
+      "deliveryFee": 80,
+      "discount": 0,
+      "platformTotal": 124,
+      "reconciled": true,
+      "splits": [
+        {
+          "restaurantId": "rest3",
+          "restaurantName": "Noodle Bar",
+          "stripeAccountId": "acct_demo_noodlebar",
+          "currency": "inr",
+          "foodSubtotal": 229,
+          "discountShare": 0,
+          "deliveryFeeShare": 47,
+          "netFoodAmount": 229,
+          "commissionRate": 0.12,
+          "commissionAmount": 27,
+          "transferAmount": 202,
+          "restaurantPayout": 202,
+          "platformRevenue": 74,
+          "transferId": "tr_sim_txn-seed-fresh_rest3",
+          "transferStatus": "paid"
+        },
+        {
+          "restaurantId": "rest8",
+          "restaurantName": "Dessert Heaven",
+          "stripeAccountId": "acct_demo_dessertheaven",
+          "currency": "inr",
+          "foodSubtotal": 159,
+          "discountShare": 0,
+          "deliveryFeeShare": 33,
+          "netFoodAmount": 159,
+          "commissionRate": 0.11,
+          "commissionAmount": 17,
+          "transferAmount": 142,
+          "restaurantPayout": 142,
+          "platformRevenue": 50,
+          "transferId": "tr_sim_txn-seed-fresh_rest8",
+          "transferStatus": "paid"
+        }
+      ],
+      "transfers": [
+        {
+          "transferId": "tr_sim_txn-seed-fresh_rest3",
+          "restaurantId": "rest3",
+          "stripeAccountId": "acct_demo_noodlebar",
+          "amount": 202,
+          "amountMinor": 20200
+        },
+        {
+          "transferId": "tr_sim_txn-seed-fresh_rest8",
+          "restaurantId": "rest8",
+          "stripeAccountId": "acct_demo_dessertheaven",
+          "amount": 142,
+          "amountMinor": 14200
+        }
+      ]
+    }
+  }
+]

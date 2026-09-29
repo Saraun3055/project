@@ -20,9 +20,10 @@ interface LoginScreenProps {
   onLoginSuccess: (email: string) => void;
   onSkip: () => void;
   onSignUp?: () => void;
+  onRestaurantLogin?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onSkip, onSignUp }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onSkip, onSignUp, onRestaurantLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -144,6 +145,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onSkip
               <Text style={styles.signUpText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+          <TouchableOpacity onPress={() => onRestaurantLogin && onRestaurantLogin()} style={{marginTop: 24, alignItems: 'center'}}>
+            <Text style={{color: '#FF5200', fontWeight: 'bold', fontSize: 14}}>Restaurant Partner Login</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

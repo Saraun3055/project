@@ -36,6 +36,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onSavedAddresses
 }) => {
   const { totalSpent, totalSavings, healthMeterInput, ordersPlacedCount } = useSelector((state: RootState) => state.progress);
+  const { addresses, selectedAddressId } = useSelector((state: RootState) => state.user);
   const {
     theme,
     setTheme,
@@ -50,6 +51,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const displayUsername = userName;
   const displayPhone = userPhone;
   const displayAddress = userAddress;
+
+  // Use Redux props as the single source of truth for profile data
+  const resolvedName = displayUsername || 'Gourmet Explorer';
+  const resolvedEmail = displayEmail;
+  const resolvedPhone = displayPhone;
+  const selectedAddress = addresses.find(a => a.id === selectedAddressId);
+  const resolvedAddress = selectedAddress?.fullAddress || displayAddress || 'No address saved';
   
   // Taste DNA computes automatically based on ordering behavior or static personalized tag
   const tasteDNA = 'Spicy Indian Lover • Sweet Tooth • Occasional Healthy Pasta Diner';
@@ -68,17 +76,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
         {/* User Card with stylized photo avatar */}
         <View style={styles.userCard}>
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarText}>
-              {displayUsername.substring(0, 2).toUpperCase()}
+              {resolvedName.substring(0, 2).toUpperCase()}
             </Text>
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{displayUsername}</Text>
-            <Text style={styles.userSub}>{displayEmail}</Text>
-            <Text style={styles.userPhone}>{displayPhone}</Text>
+            <Text style={styles.userName}>{resolvedName}</Text>
+            <Text style={styles.userSub}>{resolvedEmail}</Text>
+            <Text style={styles.userPhone}>{resolvedPhone}</Text>
           </View>
         </View>
 
@@ -173,10 +182,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
         {/* Delivery Address Block */}
         <Text style={styles.sectionTitle}>📍 Delivery Address</Text>
-        <View style={styles.addressCard}>
-          <Text style={styles.addressTitle}>Home Address</Text>
-          <Text style={styles.addressText}>{displayAddress}</Text>
-        </View>
+        <TouchableOpacity style={styles.addressCard} onPress={onSavedAddresses} activeOpacity={0.85}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <Text style={styles.addressTitle}>
+              {selectedAddress ? `${selectedAddress.label} Address` : 'Home Address'}
+            </Text>
+            <Text style={{ color: '#FF5200', fontSize: 12, fontWeight: '700' }}>
+              {addresses.length} address{addresses.length !== 1 ? 'es' : ''} → Manage
+            </Text>
+          </View>
+          <Text style={styles.addressText}>{resolvedAddress}</Text>
+        </TouchableOpacity>
 
         {/* past orders section */}
         <Text style={styles.sectionTitle}>Past Orders</Text>
@@ -265,6 +281,51 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    gap: 10,
+  },
+  syncText: {
+    fontSize: 12,
+    color: '#E65100',
+    fontWeight: '600',
+  },
+  syncErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF4F2',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F9D6CC',
+  },
+  syncErrorText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#B3261E',
+    fontWeight: '600',
+    marginRight: 12,
+  },
+  syncRetry: {
+    backgroundColor: '#FF5200',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  syncRetryText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   userCard: {
     flexDirection: 'row',

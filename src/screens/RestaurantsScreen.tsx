@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,13 @@ import {
   Image,
   SafeAreaView,
   Platform,
+  ActivityIndicator,
+  TextInput,
 } from 'react-native';
-import { RESTAURANTS, DISHES, Dish } from '../data/mockData';
+import { RESTAURANTS, DISHES, Restaurant, Dish } from '../data/mockData';
+import { getRestaurants, getDishes } from '../api/foodApi';
 import { useCart } from '../context/CartContext';
+import { SearchIcon } from '../components/Icons';
 
 const CUISINE_FILTERS = ['All', 'Indian', 'Chinese', 'Italian', 'Fast Food', 'Desserts'];
 
@@ -27,18 +31,65 @@ const cuisinePalette: Record<string, { bg: string; text: string }> = {
 interface Props {
   onAddToCart: (dish: Dish) => void;
   onNavigateToCart: () => void;
+  initialSearchQuery?: string;
 }
 
-export const RestaurantsScreen: React.FC<Props> = ({ onAddToCart, onNavigateToCart }) => {
+export const RestaurantsScreen: React.FC<Props> = ({ onAddToCart, onNavigateToCart, initialSearchQuery = '' }) => {
   const [selectedCuisine, setSelectedCuisine] = useState<string>('All');
+  const [loadedRestaurants, setLoadedRestaurants] = useState<Restaurant[]>(RESTAURANTS);
+  const [loadedDishes, setLoadedDishes] = useState<Dish[]>(DISHES);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const { cartItems, restaurantCount, finalTotal, restaurantGroups } = useCart();
+
+  useEffect(() => {
+    setSearchQuery(initialSearchQuery);
+  }, [initialSearchQuery]);
 
   const totalCartItems = cartItems.reduce((s, i) => s + i.quantity, 0);
 
+  const loadRestaurants = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const [restaurants, dishes] = await Promise.all([getRestaurants(), getDishes()]);
+      setLoadedRestaurants(restaurants);
+      setLoadedDishes(dishes);
+    } catch {
+      setErrorMessage('Unable to load restaurants right now. Please retry.');
+      setLoadedRestaurants(RESTAURANTS);
+      setLoadedDishes(DISHES);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRestaurants();
+  }, []);
+
   const filteredRestaurants = useMemo(() => {
-    if (selectedCuisine === 'All') return RESTAURANTS;
-    return RESTAURANTS.filter(r => r.cuisine === selectedCuisine);
-  }, [selectedCuisine]);
+    let list = loadedRestaurants;
+    if (selectedCuisine !== 'All') {
+      list = list.filter(r => r.cuisine === selectedCuisine);
+    }
+    const keyword = searchQuery.trim().toLowerCase();
+    if (keyword) {
+      list = list.filter(
+        r =>
+          r.name.toLowerCase().includes(keyword) ||
+          r.description.toLowerCase().includes(keyword) ||
+          r.cuisine.toLowerCase().includes(keyword)
+      );
+    }
+    return list;
+  }, [loadedRestaurants, selectedCuisine, searchQuery]);
+
+  const dishesFor = (restaurantId: string) => {
+    const all = loadedDishes.filter(d => d.restaurantId === restaurantId);
+    return all.length ? all : DISHES.filter(d => d.restaurantId === restaurantId);
+  };
 
   const getCartCountForRestaurant = (restaurantId: string) => {
     return cartItems
@@ -93,6 +144,18 @@ export const RestaurantsScreen: React.FC<Props> = ({ onAddToCart, onNavigateToCa
           </View>
         </View>
 
+{/* Live Search */}
+        <View style={styles.searchContainer}>
+          <SearchIcon size={18} color="#666" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search restaurants, cuisines or dishes..."
+            placeholderTextColor="#888"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+
         {/* Cuisine Filter */}
         <FlatList
           horizontal
@@ -125,7 +188,24 @@ export const RestaurantsScreen: React.FC<Props> = ({ onAddToCart, onNavigateToCa
           {filteredRestaurants.length} restaurant{filteredRestaurants.length !== 1 ? 's' : ''} available
         </Text>
 
-        {/* Restaurant Cards */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FF5200" />
+            <Text style={styles.loadingText}>Loading restaurants from the FoodExpress kitchen...</Text>
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadRestaurants} activeOpacity={0.8}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+) : filteredRestaurants.length === 0 ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>🍽️ No restaurants match "{searchQuery}".</Text>
+          </View>
+        ) : (
+          <>
         {filteredRestaurants.map(restaurant => {
           const cartCount = getCartCountForRestaurant(restaurant.id);
           const pal = cuisinePalette[restaurant.cuisine] ?? { bg: '#F5F5F5', text: '#333' };
@@ -171,8 +251,8 @@ export const RestaurantsScreen: React.FC<Props> = ({ onAddToCart, onNavigateToCa
 
                 {/* Dishes from this restaurant */}
                 <Text style={styles.dishesLabel}>Popular dishes</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dishScroll}>
-                  {DISHES.filter(d => d.restaurantId === restaurant.id).map(dish => (
+<ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dishScroll}>
+                  {dishesFor(restaurant.id).map(dish => (
                     <TouchableOpacity
                       key={dish.id}
                       style={[styles.dishChip, { backgroundColor: dish.color }]}
@@ -190,11 +270,13 @@ export const RestaurantsScreen: React.FC<Props> = ({ onAddToCart, onNavigateToCa
                   ))}
                 </ScrollView>
               </View>
-            </View>
+</View>
           );
         })}
 
         <View style={{ height: totalCartItems > 0 ? 100 : 20 }} />
+          </>
+        )}
       </ScrollView>
 
       {/* Floating Cart CTA */}
@@ -274,8 +356,64 @@ const styles = StyleSheet.create({
   },
   heroTitle: { fontSize: 22, fontWeight: '900', color: '#FFF' },
   heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginTop: 4, lineHeight: 18 },
-  filterRow: { marginBottom: 4 },
+filterRow: { marginBottom: 4 },
   filterList: { paddingHorizontal: 16, gap: 8 },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111',
+    marginLeft: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  errorText: {
+    color: '#B3261E',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  retryButton: {
+    backgroundColor: '#FF5200',
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  retryText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,

@@ -1,6 +1,6 @@
-﻿import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
-export type ScreenName = 'splash' | 'welcome' | 'login' | 'register' | 'home' | 'menu' | 'restaurants' | 'details' | 'cart' | 'checkout' | 'profile' | 'editProfile' | 'address' | 'tracking' | 'feedback';
+export type ScreenName = 'splash' | 'welcome' | 'login' | 'register' | 'home' | 'menu' | 'restaurants' | 'details' | 'cart' | 'checkout' | 'profile' | 'editProfile' | 'address' | 'tracking' | 'feedback' | 'restaurantLogin' | 'restaurantDashboard';
 
 interface NavigationContextType {
   currentScreen: ScreenName;

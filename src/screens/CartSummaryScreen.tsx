@@ -59,13 +59,28 @@ export const CartSummaryScreen: React.FC<Props> = ({ onBack, onCheckout }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Multi-restaurant active order banner */}
+{/* Multi-restaurant active order banner */}
       {restaurantGroups.length > 1 && (
         <View style={styles.multiBanner}>
           <Text style={styles.multiBannerEmoji}>🎉</Text>
           <Text style={styles.multiBannerTitle}>
             Ordering from {restaurantGroups.length} restaurants!
           </Text>
+        </View>
+      )}
+
+      {/* Auto-applied coupon banner */}
+      {bestCoupon && discountAmount > 0 && (
+        <View style={styles.couponBanner}>
+          <Text style={styles.couponBannerEmoji}>🏷️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.couponBannerTitle}>
+              Coupon {bestCoupon.code} automatically applied!
+            </Text>
+            <Text style={styles.couponBannerSub}>
+              You saved ₹{discountAmount} on this order.
+            </Text>
+          </View>
         </View>
       )}
 
@@ -187,8 +202,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
   },
-  multiBannerEmoji: { fontSize: 20 },
+multiBannerEmoji: { fontSize: 20 },
   multiBannerTitle: { fontSize: 13, fontWeight: '700', color: '#2E7D32' },
+  couponBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#C8E6C9',
+  },
+  couponBannerEmoji: { fontSize: 20 },
+  couponBannerTitle: { fontSize: 13, fontWeight: '800', color: '#1B5E20' },
+  couponBannerSub: { fontSize: 12, fontWeight: '600', color: '#2E7D32', marginTop: 2 },
   scrollContent: {
     padding: 16,
     paddingBottom: 120,

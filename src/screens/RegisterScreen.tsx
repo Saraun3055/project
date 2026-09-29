@@ -25,7 +25,7 @@ import {
 } from '../utils/validators';
 
 interface RegisterScreenProps {
-  onRegisterSuccess: (data: { fullName: string; mobileNumber: string; email: string; address: string; dob: string }) => void;
+  onRegisterSuccess: (data: { fullName: string; mobileNumber: string; email: string; password: string; address: string; dob: string }) => void;
   onBack: () => void;
 }
 
@@ -91,7 +91,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegisterSucces
     if (Object.keys(newErrors).length > 0) return;
 
     Alert.alert('Registration Successful ✅', 'Your account has been created successfully!');
-    onRegisterSuccess({ fullName, mobileNumber, email, address, dob });
+    onRegisterSuccess({ fullName, mobileNumber, email, password, address, dob });
   };
 
   return (

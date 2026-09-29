@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const STORAGE_KEYS = {
   user: 'foodexpress:user',
@@ -12,6 +12,10 @@ export const STORAGE_KEYS = {
   recentSearches: 'foodexpress:recentSearches',
   deliveryPreferences: 'foodexpress:deliveryPreferences',
   healthMeter: 'foodexpress:healthMeter',
+  appliedCoupon: 'foodexpress:appliedCoupon',
+  userProfile: 'foodexpress:userProfile',
+  userAddresses: 'foodexpress:userAddresses',
+  pastOrders: 'foodexpress:pastOrders',
 };
 
 export const getStoredJson = async <T>(key: string, fallback: T): Promise<T> => {
@@ -35,6 +39,9 @@ export const saveStoredJson = async <T>(key: string, value: T): Promise<void> =>
 export const clearSessionStorage = async (): Promise<void> => {
   const sessionKeys = [
     STORAGE_KEYS.user,
+    STORAGE_KEYS.userProfile,
+    STORAGE_KEYS.userAddresses,
+    STORAGE_KEYS.pastOrders,
     STORAGE_KEYS.cart,
     STORAGE_KEYS.selectedCuisine,
     STORAGE_KEYS.searchQuery,
@@ -42,6 +49,7 @@ export const clearSessionStorage = async (): Promise<void> => {
     STORAGE_KEYS.dishRatings,
     STORAGE_KEYS.favoriteDishes,
     STORAGE_KEYS.recentSearches,
+    STORAGE_KEYS.appliedCoupon,
     STORAGE_KEYS.healthMeter,
   ];
 

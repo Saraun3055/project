@@ -1,6 +1,7 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { Dish, COUPONS, Coupon } from '../data/mockData';
+import { calculateBestCoupon } from '../api/foodApi';
 import { getStoredJson, saveStoredJson, STORAGE_KEYS } from '../utils/storage';
 
 export interface CartItem {
@@ -63,6 +64,7 @@ interface CartContextType {
   addToCart: (dish: Dish) => void;
   updateQuantity: (dishId: string, delta: number) => void;
   clearCart: () => void;
+  resetSessionState: () => void;
   toggleFlashDealFlag: (dish: Dish) => void;
 }
 
@@ -101,12 +103,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notes: 'Add extra napkins and cutlery.',
     saveAddress: true,
   });
-  const [lastFlaggedAction, setLastFlaggedAction] = useState<{ dishName: string; isFlagged: boolean } | null>(null);
+const [lastFlaggedAction, setLastFlaggedAction] = useState<{ dishName: string; isFlagged: boolean } | null>(null);
+  const [couponCache, setCouponCache] = useState<{ coupon: Coupon | null; discount: number }>({ coupon: null, discount: 0 });
+  const isHydratedRef = useRef(false);
+  const hydrationVersionRef = useRef(0);
+  const searchInteractionRef = useRef(false);
+
+  const updateSearchQuery = (query: string) => {
+    searchInteractionRef.current = true;
+    setSearchQuery(query);
+  };
 
   useEffect(() => {
+    let isMounted = true;
+    const version = hydrationVersionRef.current;
+
     const hydrateCartState = async () => {
       const savedCart = await getStoredJson<CartItem[]>(STORAGE_KEYS.cart, []);
-      const savedOrders = await getStoredJson<PlacedOrder[]>('pastOrders', []);
+      const savedOrders = await getStoredJson<PlacedOrder[]>(STORAGE_KEYS.pastOrders, []);
       const savedFlaggedDeals = await getStoredJson<string[]>(STORAGE_KEYS.flaggedDeals, []);
       const savedCuisine = await getStoredJson<string | null>(STORAGE_KEYS.selectedCuisine, null);
       const savedSearchQuery = await getStoredJson<string>(STORAGE_KEYS.searchQuery, '');
@@ -119,31 +133,63 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: 'Add extra napkins and cutlery.',
         saveAddress: true,
       });
+      const savedCoupon = await getStoredJson<{ coupon: Coupon | null; discount: number }>(STORAGE_KEYS.appliedCoupon, { coupon: null, discount: 0 });
 
+      if (!isMounted || version !== hydrationVersionRef.current) return;
+      isHydratedRef.current = true;
       setCartItems(savedCart);
       setPastOrders(savedOrders);
-      setFlaggedDeals(savedFlaggedDeals);
-      setSelectedCuisine(savedCuisine);
-      setSearchQuery(savedSearchQuery);
-      setDishRatings(savedRatings);
+       setFlaggedDeals(savedFlaggedDeals);
+       setSelectedCuisine(savedCuisine);
+       if (!searchInteractionRef.current) setSearchQuery(savedSearchQuery);
+       setDishRatings(savedRatings);
       setFavoriteDishIds(savedFavorites);
       setRecentSearches(savedRecentSearches);
       setThemeState(savedTheme);
       setDeliveryPreferencesState(savedDeliveryPreferences);
+      setCouponCache(savedCoupon);
     };
-    hydrateCartState();
+
+    hydrateCartState().catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.cart, cartItems); }, [cartItems]);
-  useEffect(() => { saveStoredJson('pastOrders', pastOrders); }, [pastOrders]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.flaggedDeals, flaggedDeals); }, [flaggedDeals]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.selectedCuisine, selectedCuisine); }, [selectedCuisine]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.searchQuery, searchQuery); }, [searchQuery]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.dishRatings, dishRatings); }, [dishRatings]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.favoriteDishes, favoriteDishIds); }, [favoriteDishIds]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.recentSearches, recentSearches); }, [recentSearches]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.theme, theme); }, [theme]);
-  useEffect(() => { saveStoredJson(STORAGE_KEYS.deliveryPreferences, deliveryPreferences); }, [deliveryPreferences]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.cart, cartItems);
+  }, [cartItems]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.pastOrders, pastOrders);
+  }, [pastOrders]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.flaggedDeals, flaggedDeals);
+  }, [flaggedDeals]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.selectedCuisine, selectedCuisine);
+  }, [selectedCuisine]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.searchQuery, searchQuery);
+  }, [searchQuery]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.dishRatings, dishRatings);
+  }, [dishRatings]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.favoriteDishes, favoriteDishIds);
+  }, [favoriteDishIds]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.recentSearches, recentSearches);
+  }, [recentSearches]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.theme, theme);
+  }, [theme]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.deliveryPreferences, deliveryPreferences);
+  }, [deliveryPreferences]);
+  useEffect(() => {
+    if (isHydratedRef.current) saveStoredJson(STORAGE_KEYS.appliedCoupon, couponCache);
+  }, [couponCache]);
 
   useEffect(() => {
     if (lastFlaggedAction) {
@@ -187,6 +233,49 @@ if (subTotal >= coupon.minOrderValue) {
     });
   }
 
+  // Synchronize coupon calculation with the backend: whenever the cart or its
+  // totals change, ask the API for the best valid coupon automatically.
+  useEffect(() => {
+    if (subTotal <= 0) {
+      setCouponCache({ coupon: null, discount: 0 });
+      return;
+    }
+    let cancelled = false;
+    calculateBestCoupon({
+      items: cartItems.map((item) => ({
+        dishId: item.dish.id,
+        restaurantId: item.dish.restaurantId,
+        restaurantName: item.dish.restaurantName,
+        name: item.dish.name,
+        price: item.dish.price,
+        quantity: item.quantity,
+      })),
+      subtotal: subTotal,
+      deliveryFee,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        const coupon = result.coupon
+          ? COUPONS.find((c) => c.code === result.coupon?.code) ?? null
+          : null;
+        setCouponCache({ coupon, discount: result.discount });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCouponCache({ coupon: bestCoupon, discount: discountAmount });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartItems, subTotal, deliveryFee]);
+
+  // Prefer the freshly calculated server coupon when it still qualifies.
+  if (couponCache.coupon && subTotal >= couponCache.coupon.minOrderValue) {
+    bestCoupon = couponCache.coupon;
+    discountAmount = couponCache.discount;
+  }
+
   const finalTotal = grandTotal - discountAmount;
 
   const addPlacedOrder = (order: PlacedOrder) => {
@@ -220,6 +309,22 @@ if (subTotal >= coupon.minOrderValue) {
   };
 
   const clearCart = () => setCartItems([]);
+
+  const resetSessionState = () => {
+    hydrationVersionRef.current += 1;
+    isHydratedRef.current = true;
+    setCartItems([]);
+    setPastOrders([]);
+    setFlaggedDeals([]);
+     setSelectedCuisine(null);
+     searchInteractionRef.current = false;
+     setSearchQuery('');
+    setDishRatings({});
+    setFavoriteDishIds([]);
+    setRecentSearches([]);
+    setCouponCache({ coupon: null, discount: 0 });
+    setLastFlaggedAction(null);
+  };
 
   const toggleFlashDealFlag = (dish: Dish) => {
     setFlaggedDeals(prev => {
@@ -268,9 +373,9 @@ if (subTotal >= coupon.minOrderValue) {
         flaggedDeals,
         selectedCuisine,
         setSelectedCuisine,
-        searchQuery,
-        setSearchQuery,
-        dishRatings,
+         searchQuery,
+         setSearchQuery: updateSearchQuery,
+         dishRatings,
         rateDish,
         favoriteDishIds,
         toggleFavorite,
@@ -285,6 +390,7 @@ if (subTotal >= coupon.minOrderValue) {
         addToCart,
         updateQuantity,
         clearCart,
+        resetSessionState,
         toggleFlashDealFlag,
       }}
     >

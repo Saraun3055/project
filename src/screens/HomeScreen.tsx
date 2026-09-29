@@ -13,7 +13,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useCart } from '../context/CartContext';
-import { DISHES, CUISINES, COMBO_MEALS, Dish, ComboMeal } from '../data/mockData';
+import { DISHES, CUISINES, COMBO_MEALS, RESTAURANTS, Dish, ComboMeal, Restaurant } from '../data/mockData';
 import { fetchDishAndCategoryData, fetchPromoBanner, PromoBanner } from '../api/foodApi';
 import { CuisineChip } from '../components/CuisineChip';
 import { DishCard } from '../components/DishCard';
@@ -28,8 +28,18 @@ interface HomeScreenProps {
   dietScore: number;
   onNavigateToCart: () => void;
   onNavigateToProfile: () => void;
+  onNavigateToRestaurants: (query?: string) => void;
   onOpenDrawer: () => void;
 }
+
+export const matchesSearchQuery = (query: string, values: Array<string | undefined>) => {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+  const searchableText = values.filter(Boolean).join(' ').toLowerCase();
+  return terms.every(term => searchableText.includes(term));
+};
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectDish,
@@ -39,6 +49,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   dietScore,
   onNavigateToCart,
   onNavigateToProfile,
+  onNavigateToRestaurants,
   onOpenDrawer
 }) => {
   const {
@@ -102,20 +113,52 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     Desserts: '🍰'
   };
 
-  // Filter dishes based on search query & cuisine selection
   const filteredDishes = useMemo(() => {
     return loadedDishes.filter((dish) => {
-      const matchesSearch =
-        dish.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        dish.cuisine.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        dish.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        dish.restaurantName.toLowerCase().includes(searchQuery.toLowerCase());
-
+      const matchesSearch = matchesSearchQuery(searchQuery, [
+        dish.name,
+        dish.cuisine,
+        dish.description,
+        dish.restaurantName,
+      ]);
       const matchesCuisine = selectedCuisine ? dish.cuisine === selectedCuisine : true;
 
       return matchesSearch && matchesCuisine;
     });
   }, [loadedDishes, searchQuery, selectedCuisine]);
+
+  const matchingRestaurants = useMemo(() => {
+    const restaurants = new Map<string, Pick<Restaurant, 'id' | 'name' | 'cuisine' | 'rating' | 'deliveryTime' | 'description' | 'tags'>>();
+
+    RESTAURANTS.forEach(restaurant => {
+      restaurants.set(restaurant.id, restaurant);
+    });
+
+    loadedDishes.forEach(dish => {
+      if (!restaurants.has(dish.restaurantId)) {
+        restaurants.set(dish.restaurantId, {
+          id: dish.restaurantId,
+          name: dish.restaurantName,
+          cuisine: dish.cuisine,
+          rating: 0,
+          deliveryTime: dish.deliveryTime,
+          description: '',
+          tags: [],
+        });
+      }
+    });
+
+    return Array.from(restaurants.values()).filter(restaurant =>
+      matchesSearchQuery(searchQuery, [
+        restaurant.name,
+        restaurant.cuisine,
+        restaurant.description,
+        ...restaurant.tags,
+      ])
+    );
+  }, [loadedDishes, searchQuery]);
+
+  const hasSearchQuery = searchQuery.trim().length > 0;
 
   // Flash deals filtering
   const flashDeals = useMemo(() => {
@@ -198,6 +241,41 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 />
               </View>
 
+              {hasSearchQuery && (
+                <View style={styles.searchResultsCard}>
+                  <Text style={styles.searchResultsTitle}>Search results</Text>
+                  <Text style={styles.searchResultsSummary}>
+                    {matchingRestaurants.length} restaurant{matchingRestaurants.length !== 1 ? 's' : ''} · {filteredDishes.length} dish{filteredDishes.length !== 1 ? 'es' : ''}
+                  </Text>
+                  {matchingRestaurants.slice(0, 3).map(restaurant => (
+                    <TouchableOpacity
+                      key={restaurant.id}
+                      style={styles.restaurantResult}
+                      onPress={() => onNavigateToRestaurants(searchQuery)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.restaurantResultInfo}>
+                        <Text style={styles.restaurantResultName}>{restaurant.name}</Text>
+                        <Text style={styles.restaurantResultMeta}>
+                          {restaurant.cuisine} · {restaurant.rating > 0 ? `★ ${restaurant.rating}` : restaurant.deliveryTime}
+                        </Text>
+                      </View>
+                      <Text style={styles.restaurantResultArrow}>→</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {matchingRestaurants.length > 0 && (
+                    <TouchableOpacity style={styles.viewRestaurantsButton} onPress={() => onNavigateToRestaurants(searchQuery)} activeOpacity={0.8}>
+                      <Text style={styles.viewRestaurantsText}>View all restaurants</Text>
+                    </TouchableOpacity>
+                  )}
+                  {matchingRestaurants.length === 0 && filteredDishes.length === 0 && (
+                    <Text style={styles.noSearchResultsText}>No restaurants or dishes match "{searchQuery}".</Text>
+                  )}
+                </View>
+              )}
+
+              {!hasSearchQuery && (
+                <>
               {promoBanner && (
                 <View style={[styles.promoBanner, { borderLeftColor: promoBanner.accentColor }]}>
                   <Text style={styles.promoKicker}>Special Offer</Text>
@@ -326,6 +404,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <Text style={styles.emptyText}>🍳 No dishes found matching "{searchQuery}"</Text>
                 </View>
               )}
+                </>
+              )}
             </>
           }
           renderItem={({ item }) => (
@@ -431,6 +511,69 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#111',
     marginLeft: 8,
+  },
+  searchResultsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  searchResultsTitle: {
+    color: '#111',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  searchResultsSummary: {
+    color: '#777',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  restaurantResult: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  restaurantResultInfo: {
+    flex: 1,
+  },
+  restaurantResultName: {
+    color: '#111',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  restaurantResultMeta: {
+    color: '#777',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  restaurantResultArrow: {
+    color: '#FF5200',
+    fontSize: 20,
+    fontWeight: '800',
+    marginLeft: 12,
+  },
+  viewRestaurantsButton: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  viewRestaurantsText: {
+    color: '#FF5200',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  noSearchResultsText: {
+    color: '#777',
+    fontSize: 13,
+    fontWeight: '600',
+    paddingTop: 10,
   },
   promoBanner: {
     backgroundColor: '#FFFFFF',
