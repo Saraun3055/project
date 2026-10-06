@@ -13,8 +13,9 @@ const { toOwnerRestaurant } = require('../utils/authUtils');
 
 const router = express.Router();
 
-// Every route below the guard is scoped to the restaurant in the bearer token.
-router.use(auth);
+// Scoped to this router's own paths: the guard must not swallow public routes
+// that are mounted on the same /api prefix.
+router.use('/restaurant', auth);
 
 /**
  * GET /api/restaurant/orders

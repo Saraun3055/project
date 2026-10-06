@@ -27,6 +27,28 @@ const req = async (path, options = {}) => {
   return { status: response.status, body };
 };
 
+/**
+ * Polls a tracking endpoint until `predicate` holds.
+ *
+ * The delivery simulation advances on wall-clock time, so fixed sleeps are
+ * inherently racy: too short and the state has not arrived yet, too long and
+ * the whole delivery is already over. Every sample is retained so a caller can
+ * assert on states that only existed mid-flight.
+ */
+const waitFor = async (path, predicate, { timeoutMs = 20000, intervalMs = 40 } = {}) => {
+  const deadline = Date.now() + timeoutMs;
+  const samples = [];
+
+  while (Date.now() < deadline) {
+    const { body, status } = await req(path);
+    samples.push(body);
+    if (status === 200 && predicate(body)) return { body, samples, timedOut: false };
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return { body: samples[samples.length - 1], samples, timedOut: true };
+};
+
 const login = async (email, password = 'Passw0rd!') => {
   const { body } = await req('/auth/restaurant/login', {
     method: 'POST',
@@ -110,7 +132,25 @@ const main = async () => {
   check('empty checkout is rejected', emptyCart.status === 400);
 
   console.log('\n== 5. Delivery simulation (two restaurants) ==');
-  const t0 = await req(`/orders/track/${transactionId}`);
+  // rest1 and rest4 are deliberately far apart, so the leg between the two
+  // pickups is long enough to observe the "ready but not collected" window.
+  const simCheckout = await req('/payments/checkout', {
+    method: 'POST',
+    body: JSON.stringify({
+      items: [
+        { dishId: 'd1', restaurantId: 'rest1', restaurantName: 'Mehfil Grand', name: 'Butter Chicken Masala', price: 349, quantity: 1 },
+        { dishId: 'd4', restaurantId: 'rest4', restaurantName: 'Dim Sum House', name: 'Dim Sum Basket', price: 199, quantity: 1 },
+      ],
+      customerId: 'u1',
+      customerName: 'Aarav Sharma',
+      timeScale: 8,
+    }),
+  });
+  check('simulation checkout succeeds', simCheckout.status === 201, `status ${simCheckout.status}`);
+  const simTxnId = simCheckout.body.transactionId;
+  const trackPath = `/orders/track/${simTxnId}`;
+
+  const t0 = await req(trackPath);
   check('tracking returns the transaction', t0.status === 200);
   check('tracking has two independent order cards', t0.body.transaction.orders.length === 2);
   check('driver route is planned', t0.body.transaction.route.legs.length === 3,
@@ -120,7 +160,7 @@ const main = async () => {
   check('driver position is reported', Boolean(t0.body.transaction.driver.position));
 
   // One restaurant answers with a prep time, the other stays silent.
-  const [orderA] = t0.body.transaction.orders;
+  const orderA = t0.body.transaction.orders.find((o) => o.restaurantId === 'rest1');
   const aToken = await login('owner@mehfilgrand.in');
   const accepted = await req(`/restaurant/orders/${orderA.orderId}`, {
     method: 'PATCH',
@@ -138,23 +178,53 @@ const main = async () => {
   });
   check('a restaurant cannot touch another restaurant order', cross.status === 404, `status ${cross.status}`);
 
-  await new Promise((resolve) => setTimeout(resolve, 4000));
-  const t1 = await req(`/orders/track/${transactionId}`);
-  const a1 = t1.body.transaction.orders.find((o) => o.restaurantId === 'rest1');
-  const b1 = t1.body.transaction.orders.find((o) => o.restaurantId === 'rest5');
-  check('the two orders advance independently', a1.statusLabel !== b1.statusLabel || a1.prepMinutes !== b1.prepMinutes,
-    `${a1.statusLabel} / ${b1.statusLabel}`);
-  check('timeline is built per order', a1.timeline.length >= 3);
-  check('driver waits for the slowest kitchen', t1.body.transaction.eta.waitingOnRestaurant.length > 0);
+  // The two kitchens run on independent timers: rest1 is told to prep for 1
+  // minute, rest4 is never answered and falls back to its 14 minute default.
+  const diverged = await waitFor(
+    trackPath,
+    (body) => {
+      const a = body.transaction.orders.find((o) => o.restaurantId === 'rest1');
+      const b = body.transaction.orders.find((o) => o.restaurantId === 'rest4');
+      return a && b && a.statusLabel !== b.statusLabel;
+    },
+    { timeoutMs: 8000 }
+  );
+  const divA = diverged.body.transaction.orders.find((o) => o.restaurantId === 'rest1');
+  const divB = diverged.body.transaction.orders.find((o) => o.restaurantId === 'rest4');
+  check('the two orders advance independently', divA.statusLabel !== divB.statusLabel,
+    `${divA.statusLabel} / ${divB.statusLabel}`);
+  check('timeline is built per order', divA.timeline.length >= 3);
+  check('driver waits for the slowest kitchen', diverged.body.transaction.eta.waitingOnRestaurant.length > 0,
+    `waiting on ${diverged.body.transaction.eta.waitingOnRestaurant.join(', ') || 'nobody'}`);
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-  const t2 = await req(`/orders/track/${transactionId}`);
-  const a2 = t2.body.transaction.orders.find((o) => o.restaurantId === 'rest1');
-  const b2 = t2.body.transaction.orders.find((o) => o.restaurantId === 'rest5');
+  // Wait for the first pickup, then confirm the second order is still waiting
+  // at its kitchen rather than jumping straight to Delivered.
+  const firstPickup = await waitFor(
+    trackPath,
+    (body) => {
+      const a = body.transaction.orders.find((o) => o.restaurantId === 'rest1');
+      const b = body.transaction.orders.find((o) => o.restaurantId === 'rest4');
+      return a && b && a.pickedUpAt && !b.pickedUpAt;
+    },
+    { timeoutMs: 25000 }
+  );
+  const a2 = firstPickup.body.transaction.orders.find((o) => o.restaurantId === 'rest1');
+  const b2 = firstPickup.body.transaction.orders.find((o) => o.restaurantId === 'rest4');
   check('first stop is picked up', a2.statusLabel === 'Picked up' || a2.statusLabel === 'Delivered',
     a2.statusLabel);
   check('order B is not yet picked up', b2.statusLabel === 'Ready for pickup', b2.statusLabel);
   check('order A has a pickup timestamp', Boolean(a2.pickedUpAt));
+  check('the rider is on the road between stops', firstPickup.body.transaction.driver.isOnTheRoad === true,
+    firstPickup.body.transaction.driver.activity);
+
+  const delivered = await waitFor(
+    trackPath,
+    (body) => body.transaction.orders.every((o) => o.statusLabel === 'Delivered'),
+    { timeoutMs: 40000 }
+  );
+  check('the whole transaction is delivered', !delivered.timedOut,
+    delivered.body.transaction.orders.map((o) => o.statusLabel).join(' / '));
+  check('ETA drops to zero once delivered', delivered.body.transaction.eta.minutes === 0);
 
   console.log('\n== 6. Decline + refund ==');
   const checkout2 = await req('/payments/checkout', {

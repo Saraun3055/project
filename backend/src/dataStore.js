@@ -43,9 +43,11 @@ module.exports = {
   // transactionId, which is what ties them back to one customer payment.
   readOrders: () => readJsonFileOrDefault('orders.json', []),
   readTransactions: () => readJsonFileOrDefault('transactions.json', []),
+  readFavorites: () => readJsonFileOrDefault('favorites.json', []),
   writeCart: (cart) => writeJsonFile('cart.json', cart),
   writeOrders: (orders) => writeJsonFile('orders.json', orders),
   writeTransactions: (transactions) => writeJsonFile('transactions.json', transactions),
   writeRestaurants: (restaurants) => writeJsonFile('restaurants.json', restaurants),
   writeProfiles: (profiles) => writeJsonFile('profiles.json', profiles),
+  writeFavorites: (favorites) => writeJsonFile('favorites.json', favorites),
 };

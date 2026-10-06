@@ -18,7 +18,7 @@
  * so the rest of the app and the demo flow stay fully functional.
  */
 
-const { Buffer } = require('buffer');
+const { createHash } = require('crypto');
 
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 const PLATFORM_FEE_PER_ORDER = 5; // ₹5 handling fee retained by the platform
@@ -27,6 +27,11 @@ const CURRENCY = 'inr';
 const isLive = () => Boolean(process.env.STRIPE_SECRET_KEY);
 
 const toMinorUnits = (rupees) => Math.round(Number(rupees) * 100);
+
+// Deterministic id derived from the full payload. Slicing a hex encoding would
+// only ever hash the first few bytes, which collides across a checkout.
+const fingerprint = (payload, length) =>
+  createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, length);
 
 const stripeRequest = async (path, params) => {
   const secret = process.env.STRIPE_SECRET_KEY;
@@ -62,29 +67,26 @@ const stripeRequest = async (path, params) => {
 };
 
 const simulatePaymentIntent = (payload) => {
-  const fingerprint = Buffer.from(
-    JSON.stringify({ amount: payload.amount, currency: payload.currency, transferGroup: payload.transfer_group })
-  )
-    .toString('hex')
-    .slice(0, 18);
+  const id = fingerprint(
+    { amount: payload.amount, currency: payload.currency, transferGroup: payload.transfer_group },
+    24
+  );
   return {
-    id: `pi_sim_${fingerprint}`,
+    id: `pi_sim_${id}`,
     object: 'payment_intent',
     amount: payload.amount,
     currency: payload.currency,
     status: 'succeeded',
-    client_secret: `pi_sim_${fingerprint}_secret_${fingerprint.slice(0, 8)}`,
+    client_secret: `pi_sim_${id}_secret_${id.slice(0, 8)}`,
     transfer_group: payload.transfer_group,
     simulated: true,
   };
 };
 
 const simulateTransfer = ({ amount, destination, transferGroup }) => {
-  const fingerprint = Buffer.from(`${transferGroup}:${destination}:${amount}`)
-    .toString('hex')
-    .slice(0, 16);
+  const id = fingerprint({ amount, destination, transferGroup }, 20);
   return {
-    id: `tr_sim_${fingerprint}`,
+    id: `tr_sim_${id}`,
     object: 'transfer',
     amount,
     currency: CURRENCY,
@@ -154,10 +156,13 @@ const buildSplit = ({ groups, deliveryFee = 0, discount = 0 }) => {
       chargedAmount,
       transferTotal,
       platformTotal,
+      // Reported for transparency. The handling fee is not added to
+      // `chargedAmount`, so it is not part of the reconciliation below.
       platformHandlingFee: PLATFORM_FEE_PER_ORDER,
-      // platformRevenue is measured before the flat handling fee, so the
-      // difference between the two must be zero for the books to balance.
-      reconciled: Math.abs(chargedAmount - (transferTotal + platformTotal + PLATFORM_FEE_PER_ORDER)) <= 1,
+      // Every rupee the customer is charged leaves the platform balance either
+      // as a transfer to a restaurant or as platform revenue, so the two must
+      // reconcile to the charged amount.
+      reconciled: Math.abs(chargedAmount - (transferTotal + platformTotal)) <= 1,
     },
   };
 };
