@@ -1,29 +1,34 @@
 const express = require('express');
-const { readOrders } = require('../dataStore');
+const Order = require('../models/Order');
+const { optionalCustomer } = require('../middleware/requireCustomer');
 const {
   getOrderById,
   getLiveTransaction,
   listLiveTransactions,
   placeOrder,
 } = require('../services/orderService');
+const { toPlainList } = require('../utils/serialize');
 
 const router = express.Router();
 
 /**
  * GET /api/orders
- * Optional filters: customerId, restaurantId, transactionId.
+ * With a bearer token the result is always restricted to that customer, so one
+ * customer can never list another's orders. Without a token the legacy
+ * customerId / restaurantId / transactionId filters still apply.
  */
-router.get('/orders', async (req, res, next) => {
+router.get('/orders', optionalCustomer, async (req, res, next) => {
   try {
-    const { customerId, restaurantId, transactionId } = req.query;
-    const orders = await readOrders();
-    const filtered = orders.filter((order) => {
-      if (customerId && order.customerId !== customerId) return false;
-      if (restaurantId && order.restaurantId !== restaurantId) return false;
-      if (transactionId && order.transactionId !== transactionId) return false;
-      return true;
-    });
-    res.status(200).json({ orders: filtered });
+    const { restaurantId, transactionId } = req.query;
+    const customerId = req.customer ? req.customer.id : req.query.customerId;
+
+    const filter = {};
+    if (customerId) filter.customerId = customerId;
+    if (restaurantId) filter.restaurantId = restaurantId;
+    if (transactionId) filter.transactionId = transactionId;
+
+    const orders = await Order.find(filter).sort({ placedAt: -1 }).lean();
+    res.status(200).json({ orders: toPlainList(orders) });
   } catch (error) {
     next(error);
   }
@@ -34,9 +39,10 @@ router.get('/orders', async (req, res, next) => {
  * Live, simulated view of each checkout (one entry per customer payment).
  * This is what the customer tracking screen polls.
  */
-router.get('/orders/transactions', async (req, res, next) => {
+router.get('/orders/transactions', optionalCustomer, async (req, res, next) => {
   try {
-    const { customerId, restaurantId } = req.query;
+    const { restaurantId } = req.query;
+    const customerId = req.customer ? req.customer.id : req.query.customerId;
     const transactions = await listLiveTransactions({ customerId, restaurantId });
     res.status(200).json({ transactions });
   } catch (error) {
@@ -62,14 +68,19 @@ router.get('/orders/track/:transactionId', async (req, res, next) => {
 
 /**
  * GET /api/orders/:orderId
- * A single per-restaurant order record.
+ * A single per-restaurant order record. A signed-in customer may only read
+ * their own order.
  */
-router.get('/orders/:orderId', async (req, res, next) => {
+router.get('/orders/:orderId', optionalCustomer, async (req, res, next) => {
   try {
     const order = await getOrderById(req.params.orderId);
     if (!order) {
       return res.status(404).json({ error: `Order ${req.params.orderId} not found.` });
     }
+    if (req.customer && order.customerId !== req.customer.id) {
+      return res.status(404).json({ error: `Order ${req.params.orderId} not found.` });
+    }
+
     const live = await getLiveTransaction(order.transactionId);
     const simulated = live?.orders?.find((item) => item.orderId === order.orderId) ?? null;
     res.status(200).json({ order: { ...order, ...(simulated ?? {}) } });
@@ -82,8 +93,9 @@ router.get('/orders/:orderId', async (req, res, next) => {
  * POST /api/orders
  * Charges the customer once and creates the per-restaurant orders, then starts
  * the multi-stop delivery simulation. Equivalent to POST /api/payments/checkout.
+ * Identity comes from the bearer token whenever one is supplied.
  */
-router.post('/orders', async (req, res, next) => {
+router.post('/orders', optionalCustomer, async (req, res, next) => {
   try {
     if (!Array.isArray(req.body?.items) || req.body.items.length === 0) {
       return res.status(400).json({ error: 'An order must contain at least one item.' });
@@ -91,9 +103,11 @@ router.post('/orders', async (req, res, next) => {
 
     const { transaction, orders, payment } = await placeOrder({
       items: req.body.items,
-      customerId: req.body.customerId,
-      customerName: req.body.customerName,
-      customerAddress: req.body.customerAddress,
+      customerId: req.customer ? req.customer.id : req.body.customerId,
+      customerName: req.customer ? req.customer.name : req.body.customerName,
+      customerAddress: req.customer
+        ? req.body.customerAddress ?? defaultAddress(req.customer)
+        : req.body.customerAddress,
       deliveryFee: req.body.deliveryFee,
       discount: req.body.discount,
       timeScale: req.body.timeScale,
@@ -128,5 +142,16 @@ router.post('/orders', async (req, res, next) => {
     next(error);
   }
 });
+
+/** Prefers the customer's saved default address when they did not send one. */
+function defaultAddress(customer) {
+  const chosen = (customer.addresses || []).find((address) => address.isDefault)
+    || (customer.addresses || [])[0];
+
+  if (chosen) {
+    return { label: chosen.label, line1: chosen.line1, city: chosen.city, pincode: chosen.pincode };
+  }
+  return customer.address ? { label: 'Home', line1: customer.address, city: '', pincode: '' } : undefined;
+}
 
 module.exports = router;

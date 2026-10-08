@@ -5,11 +5,17 @@
  * record per restaurant. All of those records share a `transactionId`, so the
  * customer sees one order with N cards and each restaurant only ever sees (and
  * can only ever act on) its own order.
+ *
+ * Persistence is MongoDB: one `Order` document per restaurant and one
+ * `Transaction` document per customer payment.
  */
 
-const { readOrders, writeOrders, readTransactions, writeTransactions, readRestaurants } = require('../dataStore');
+const Order = require('../models/Order');
+const Transaction = require('../models/Transaction');
+const Restaurant = require('../models/Restaurant');
 const { chargeAndSplit, refundTransfer } = require('../utils/stripeUtils');
 const { simulateTransaction, applyOrderDecision, STATUS, DEFAULT_CUSTOMER_ADDRESS } = require('../utils/deliverySimulator');
+const { toPlain } = require('../utils/serialize');
 
 const DELIVERY_FEE_PER_RESTAURANT = 40;
 
@@ -61,7 +67,7 @@ const placeOrder = async ({
     throw error;
   }
 
-  const restaurants = await readRestaurants();
+  const restaurants = await Restaurant.find().lean();
   const groups = groupItemsByRestaurant(items);
   const fee = Number.isFinite(deliveryFee)
     ? Number(deliveryFee)
@@ -98,6 +104,7 @@ const placeOrder = async ({
       transactionId,
       customerId,
       customerName,
+      customerAddress: customerAddress ?? null,
       restaurantId: group.restaurantId,
       restaurantName: group.restaurantName,
       coordinates: group.coordinates,
@@ -110,6 +117,10 @@ const placeOrder = async ({
       payoutAmount: split?.transferAmount ?? 0,
       transferId: split?.transferId ?? null,
       paymentIntentId: payment.paymentIntentId,
+      payment: {
+        status: payment.status,
+        chargedAmount: payment.totals.chargedAmount,
+      },
       status: STATUS.PLACED,
       prepMinutes: restaurant?.default_prep_minutes ?? 18,
       defaultPrepMinutes: restaurant?.default_prep_minutes ?? 18,
@@ -143,21 +154,18 @@ const placeOrder = async ({
       reconciled: payment.totals.reconciled,
       splits: payment.splits,
       transfers: payment.transfers,
+      reversals: [],
     },
   };
 
-  const [existingOrders, existingTransactions] = await Promise.all([readOrders(), readTransactions()]);
-  await Promise.all([
-    writeOrders([...orders, ...existingOrders]),
-    writeTransactions([transaction, ...existingTransactions]),
-  ]);
+  await Promise.all([Order.insertMany(orders), Transaction.create(transaction)]);
 
   return { transaction, orders, payment };
 };
 
 const getOrdersForRestaurant = async (restaurantId) => {
-  const orders = await readOrders();
-  return orders.filter((order) => order.restaurantId === restaurantId);
+  const orders = await Order.find({ restaurantId }).sort({ placedAt: -1 }).lean();
+  return orders.map(toPlain);
 };
 
 /**
@@ -171,13 +179,17 @@ const getOrdersForRestaurant = async (restaurantId) => {
 const attachLiveState = async (orders) => {
   if (orders.length === 0) return [];
   const transactionIds = [...new Set(orders.map((order) => order.transactionId))];
-  const [transactions, allOrders] = await Promise.all([readTransactions(), readOrders()]);
+
+  const [transactions, siblings] = await Promise.all([
+    Transaction.find({ transactionId: { $in: transactionIds } }).lean(),
+    Order.find({ transactionId: { $in: transactionIds } }).lean(),
+  ]);
 
   const liveByOrderId = new Map();
-  transactionIds.forEach((transactionId) => {
-    const transaction = transactions.find((item) => item.transactionId === transactionId);
-    if (!transaction) return;
-    const transactionOrders = allOrders.filter((order) => transaction.orderIds.includes(order.orderId));
+  transactions.forEach((transaction) => {
+    const transactionOrders = siblings.filter((order) =>
+      (transaction.orderIds || []).includes(order.orderId)
+    );
     simulateTransaction({ ...transaction, orders: transactionOrders }).orders.forEach((state) => {
       liveByOrderId.set(state.orderId, state);
     });
@@ -187,18 +199,18 @@ const attachLiveState = async (orders) => {
 };
 
 const getOrdersForCustomer = async (customerId) => {
-  const orders = await readOrders();
-  return orders.filter((order) => order.customerId === customerId);
+  const orders = await Order.find({ customerId }).sort({ placedAt: -1 }).lean();
+  return orders.map(toPlain);
 };
 
 const getOrderById = async (orderId) => {
-  const orders = await readOrders();
-  return orders.find((order) => order.orderId === orderId || order.id === orderId) ?? null;
+  const order = await Order.findOne({ orderId }).lean();
+  return order ? toPlain(order) : null;
 };
 
 const getTransaction = async (transactionId) => {
-  const transactions = await readTransactions();
-  return transactions.find((item) => item.transactionId === transactionId) ?? null;
+  const transaction = await Transaction.findOne({ transactionId }).lean();
+  return transaction ? toPlain(transaction) : null;
 };
 
 /**
@@ -208,31 +220,35 @@ const getLiveTransaction = async (transactionId) => {
   const transaction = await getTransaction(transactionId);
   if (!transaction) return null;
 
-  const orders = await readOrders();
-  const transactionOrders = orders.filter((order) => transaction.orderIds.includes(order.orderId));
-
-  const view = simulateTransaction({ ...transaction, orders: transactionOrders });
+  const orders = await Order.find({ transactionId }).lean();
+  const view = simulateTransaction({ ...transaction, orders });
   return { ...view, payment: transaction.payment };
 };
 
 const listLiveTransactions = async ({ customerId, restaurantId } = {}) => {
-  const [transactions, orders] = await Promise.all([readTransactions(), readOrders()]);
+  const filter = {};
+  if (customerId) filter.customerId = customerId;
 
-  return transactions
-    .filter((transaction) => {
-      if (customerId && transaction.customerId !== customerId) return false;
-      if (restaurantId) {
-        const owned = orders.filter(
-          (order) => order.transactionId === transaction.transactionId && order.restaurantId === restaurantId
-        );
-        return owned.length > 0;
-      }
-      return true;
-    })
-    .map((transaction) => {
-      const transactionOrders = orders.filter((order) => transaction.orderIds.includes(order.orderId));
-      return simulateTransaction({ ...transaction, orders: transactionOrders });
-    });
+  let transactions = await Transaction.find(filter).sort({ placedAt: -1 }).lean();
+
+  if (restaurantId) {
+    const owned = await Order.find({ restaurantId }).distinct('transactionId');
+    const ownedSet = new Set(owned);
+    transactions = transactions.filter((transaction) => ownedSet.has(transaction.transactionId));
+  }
+
+  const allOrderIds = transactions.flatMap((transaction) => transaction.orderIds || []);
+  const orders = allOrderIds.length
+    ? await Order.find({ orderId: { $in: allOrderIds } }).lean()
+    : [];
+  const ordersById = new Map(orders.map((order) => [order.orderId, order]));
+
+  return transactions.map((transaction) => {
+    const transactionOrders = (transaction.orderIds || [])
+      .map((orderId) => ordersById.get(orderId))
+      .filter(Boolean);
+    return simulateTransaction({ ...transaction, orders: transactionOrders });
+  });
 };
 
 /**
@@ -240,8 +256,7 @@ const listLiveTransactions = async ({ customerId, restaurantId } = {}) => {
  * how long preparation will take. Declining reverses the transfer.
  */
 const updateOrderFromRestaurant = async ({ orderId, restaurantId, status, prepMinutes, reason }) => {
-  const orders = await readOrders();
-  const order = orders.find((item) => item.orderId === orderId && item.restaurantId === restaurantId);
+  const order = await Order.findOne({ orderId, restaurantId }).lean();
   if (!order) {
     const error = new Error('Order not found for this restaurant.');
     error.status = 404;
@@ -258,49 +273,61 @@ const updateOrderFromRestaurant = async ({ orderId, restaurantId, status, prepMi
 
   // The delivery state machine only advances while an order is accepted, so an
   // order that has already reached the customer is read-only.
-  const [liveOrder] = await attachLiveState([order]);
+  const [liveOrder] = await attachLiveState([toPlain(order)]);
   if (liveOrder?.completed && nextStatus === STATUS.ACCEPTED) {
     const error = new Error('This order has already been delivered and cannot be changed.');
     error.status = 409;
     throw error;
   }
 
+  const update = {};
+
   if (nextStatus === STATUS.DECLINED && order.status !== STATUS.DECLINED) {
-    order.status = STATUS.DECLINED;
-    order.declinedAt = new Date().toISOString();
-    order.declineReason = reason || 'Restaurant is at capacity right now.';
+    update.status = STATUS.DECLINED;
+    update.declinedAt = new Date().toISOString();
+    update.declineReason = reason || 'Restaurant is at capacity right now.';
 
     const transaction = await getTransaction(order.transactionId);
     if (transaction?.payment) {
       const reversal = await refundTransfer({
         paymentIntentId: transaction.payment.paymentIntentId,
-        transfers: transaction.payment.transfers.filter((transfer) => transfer.restaurantId === restaurantId),
-        reason: order.declineReason,
+        transfers: (transaction.payment.transfers || []).filter(
+          (transfer) => transfer.restaurantId === restaurantId
+        ),
+        reason: update.declineReason,
       });
-      order.refundId = reversal.refundId;
-      order.refundedAmount = reversal.reversedAmount;
-      const transactions = await readTransactions();
-      const target = transactions.find((item) => item.transactionId === order.transactionId);
-      if (target) {
-        target.payment.reversals = [...(target.payment.reversals ?? []), {
-          restaurantId,
-          ...reversal,
-          at: new Date().toISOString(),
-        }];
-        await writeTransactions(transactions);
-      }
+      update.refundId = reversal.refundId;
+      update.refundedAmount = reversal.reversedAmount;
+
+      await Transaction.updateOne(
+        { transactionId: order.transactionId },
+        {
+          $push: {
+            'payment.reversals': {
+              restaurantId,
+              ...reversal,
+              at: new Date().toISOString(),
+            },
+          },
+        }
+      );
     }
   } else if (nextStatus === STATUS.ACCEPTED && order.status !== STATUS.ACCEPTED) {
-    order.status = STATUS.ACCEPTED;
-    order.acceptedAt = new Date().toISOString();
+    update.status = STATUS.ACCEPTED;
+    update.acceptedAt = new Date().toISOString();
   }
 
   if (Number(prepMinutes) > 0) {
-    order.prepMinutes = Number(prepMinutes);
+    update.prepMinutes = Number(prepMinutes);
   }
 
-  await writeOrders(orders);
-  return order;
+  const saved = await Order.findOneAndUpdate(
+    { orderId, restaurantId },
+    { $set: update },
+    { new: true }
+  ).lean();
+
+  return toPlain(saved);
 };
 
 /**

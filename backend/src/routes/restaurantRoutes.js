@@ -1,5 +1,6 @@
 const express = require('express');
-const { readRestaurants, writeRestaurants, readDishes } = require('../dataStore');
+const Dish = require('../models/Dish');
+const Restaurant = require('../models/Restaurant');
 const { auth } = require('./authRoutes');
 const {
   getOrdersForRestaurant,
@@ -10,6 +11,7 @@ const {
 } = require('../services/orderService');
 const { STATUS } = require('../utils/deliverySimulator');
 const { toOwnerRestaurant } = require('../utils/authUtils');
+const { toPlain, toPlainList } = require('../utils/serialize');
 
 const router = express.Router();
 
@@ -94,9 +96,11 @@ router.get('/restaurant/stats', async (req, res, next) => {
  */
 router.get('/restaurant/menu', async (req, res, next) => {
   try {
-    const dishes = await readDishes();
-    const mine = dishes.filter((dish) => dish.restaurantId === req.restaurant.id);
-    res.status(200).json({ dishes: mine, restaurant: toOwnerRestaurant(req.restaurant) });
+    const dishes = await Dish.find({ restaurantId: req.restaurant.id }).lean();
+    res.status(200).json({
+      dishes: toPlainList(dishes),
+      restaurant: toOwnerRestaurant(req.restaurant),
+    });
   } catch (error) {
     next(error);
   }
@@ -108,9 +112,8 @@ router.get('/restaurant/menu', async (req, res, next) => {
  */
 router.patch('/restaurant/settings', async (req, res, next) => {
   try {
-    const restaurants = await readRestaurants();
-    const index = restaurants.findIndex((item) => item.id === req.restaurant.id);
-    if (index === -1) {
+    const restaurant = await Restaurant.findOne({ id: req.restaurant.id });
+    if (!restaurant) {
       return res.status(404).json({ error: 'Restaurant not found.' });
     }
 
@@ -120,21 +123,21 @@ router.patch('/restaurant/settings', async (req, res, next) => {
       if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 240) {
         return res.status(400).json({ error: 'defaultPrepMinutes must be between 1 and 240.' });
       }
-      restaurants[index].default_prep_minutes = Math.round(minutes);
+      restaurant.default_prep_minutes = Math.round(minutes);
     }
     if (isOpen !== undefined) {
-      restaurants[index].is_open = Boolean(isOpen);
+      restaurant.is_open = Boolean(isOpen);
     }
     if (commissionRate !== undefined) {
       const rate = Number(commissionRate);
       if (!Number.isFinite(rate) || rate < 0 || rate > 0.5) {
         return res.status(400).json({ error: 'commission_rate must be between 0 and 0.5.' });
       }
-      restaurants[index].commission_rate = rate;
+      restaurant.commission_rate = rate;
     }
 
-    await writeRestaurants(restaurants);
-    res.status(200).json({ restaurant: toOwnerRestaurant(restaurants[index]) });
+    await restaurant.save();
+    res.status(200).json({ restaurant: toOwnerRestaurant(toPlain(restaurant)) });
   } catch (error) {
     next(error);
   }

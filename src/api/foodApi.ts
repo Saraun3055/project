@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import { Platform } from 'react-native';
 import { CUISINES, DISHES, RESTAURANTS, Dish, Restaurant, COUPONS, Coupon } from '../data/mockData';
 
@@ -57,6 +57,8 @@ export interface HomeApiState {
 // - iOS simulator and web builds can use localhost.
 // - For a physical device, replace with your machine's LAN IP,
 //   e.g. http://192.168.x.x:3001/api
+import { getAuthToken } from '../utils/tokenStorage';
+
 export const API_BASE_URL =
   Platform.OS === 'android'
     ? 'http://10.0.2.2:3001/api'
@@ -68,6 +70,18 @@ export const apiClient = axios.create({
   headers: {
     Accept: 'application/json',
   },
+});
+
+apiClient.interceptors.request.use(async (config) => {
+  try {
+    const token = await getAuthToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch {
+    // Non-blocking if storage read fails
+  }
+  return config;
 });
 
 const fallbackProfile: RemoteProfile = {

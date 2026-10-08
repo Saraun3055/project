@@ -1,51 +1,18 @@
-/**
- * Simulated JWT Authentication Service for Experiment 6.
- * Uses AsyncStorage to persist a fake JWT token.
- */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from '../api/foodApi';
+import { getAuthToken, setAuthToken, removeAuthToken, TOKEN_KEY } from './tokenStorage';
+
+export { getAuthToken, setAuthToken, removeAuthToken, TOKEN_KEY };
 
 // base64 helpers available in the RN runtime (Hermes) but not in some TS lib configs
 declare const btoa: (input: string) => string;
 declare const atob: (input: string) => string;
 
-const TOKEN_KEY = 'FOOD_EXPRESS_JWT_TOKEN';
-
-// Fallback storage for environments where native AsyncStorage is null (e.g. missing native build)
-let inMemoryToken: string | null = null;
-
-const getAuthToken = async (): Promise<string | null> => {
-  try {
-    const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
-    inMemoryToken = storedToken || null;
-    return inMemoryToken;
-  } catch {
-    return inMemoryToken;
-  }
-};
-
-const setAuthToken = async (token: string): Promise<void> => {
-  inMemoryToken = token;
-  try {
-    await AsyncStorage.setItem(TOKEN_KEY, token);
-  } catch {
-    return;
-  }
-};
-
-const removeAuthToken = async (): Promise<void> => {
-  inMemoryToken = null;
-  try {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-  } catch {
-    return;
-  }
-};
-
 interface DecodedToken {
-  email: string;
-  iat: number;
-  exp: number;
+  email?: string;
+  sub?: string;
+  iat?: number;
+  exp?: number;
 }
 
 const decodeToken = (token: string): DecodedToken | null => {
@@ -55,9 +22,11 @@ const decodeToken = (token: string): DecodedToken | null => {
 
     const encodedPayload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padding = (4 - (encodedPayload.length % 4)) % 4;
-    const payload = JSON.parse(atob(`${encodedPayload}${'='.repeat(padding)}`)) as Partial<DecodedToken>;
+    const rawString = atob(`${encodedPayload}${'='.repeat(padding)}`);
+    const payload = JSON.parse(rawString) as Partial<DecodedToken>;
 
-    if (typeof payload.email !== 'string' || typeof payload.exp !== 'number') {
+    const email = payload.email || (payload.sub && payload.sub.includes('@') ? payload.sub : undefined);
+    if (!email && typeof payload.sub !== 'string') {
       return null;
     }
 
@@ -68,36 +37,88 @@ const decodeToken = (token: string): DecodedToken | null => {
 };
 
 /**
- * Simulates a JWT login.
- * Accepts any valid email + password that passes strength requirements.
- * Generates a fake JWT-like token and stores it.
+ * Real or simulated customer registration with live MongoDB backend.
  */
-export const simulateLogin = async (email: string, _password: string): Promise<{ success: boolean; token?: string; error?: string }> => {
+export const registerCustomer = async (
+  name: string,
+  email: string,
+  password: string,
+  phone?: string
+): Promise<{ success: boolean; token?: string; error?: string }> => {
+  const normalizedEmail = email.trim().toLowerCase();
   try {
-    // Simulate server delay
-    await new Promise<void>((resolve) => setTimeout(() => resolve(), 500));
+    const { data } = await apiClient.post('/auth/register', {
+      name,
+      email: normalizedEmail,
+      password,
+      phone,
+    });
+    if (data?.token) {
+      await setAuthToken(data.token);
+      console.log('[AuthService] Backend registration succeeded. JWT stored.');
+      return { success: true, token: data.token };
+    }
+  } catch (error: any) {
+    const apiError = error?.response?.data?.error;
+    if (apiError) {
+      return { success: false, error: apiError };
+    }
+    console.warn('[AuthService] Live backend unreachable during registration, falling back to local simulation:', error);
+  }
+
+  // Fallback to local session
+  return simulateLogin(normalizedEmail, password);
+};
+
+/**
+ * Authenticates customer with real backend JWT service, falling back to simulated session.
+ */
+export const simulateLogin = async (
+  email: string,
+  password: string
+): Promise<{ success: boolean; token?: string; error?: string }> => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Try live backend first
+  try {
+    const { data } = await apiClient.post('/auth/login', {
+      email: normalizedEmail,
+      password,
+    });
+    if (data?.token) {
+      await setAuthToken(data.token);
+      console.log('[AuthService] Live backend JWT login succeeded.');
+      return { success: true, token: data.token };
+    }
+  } catch (error: any) {
+    const apiError = error?.response?.data?.error;
+    if (apiError) {
+      // Reject if explicit auth failure from backend
+      return { success: false, error: apiError };
+    }
+    console.warn('[AuthService] Live backend login unreachable, falling back to local simulation:', error);
+  }
+
+  try {
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 300));
 
     const now = Date.now();
-    const normalizedEmail = email.trim().toLowerCase();
     const payload: DecodedToken = {
       email: normalizedEmail,
-      iat: now,
-      exp: now + 24 * 60 * 60 * 1000,
+      iat: Math.floor(now / 1000),
+      exp: Math.floor((now + 24 * 60 * 60 * 1000) / 1000),
     };
 
-    // Encode as base64 to mimic a JWT structure (header.payload.signature)
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
     const body = btoa(JSON.stringify(payload));
     const signature = btoa(`simulated-signature-${now}`);
     const token = `${header}.${body}.${signature}`;
 
-    // Store the token
     await setAuthToken(token);
-
-    console.log('[AuthService] JWT token generated and stored successfully.');
+    console.log('[AuthService] Fallback JWT token generated and stored.');
     return { success: true, token };
   } catch (error) {
-    console.error('[AuthService] Login failed:', error);
+    console.error('[AuthService] Fallback login failed:', error);
     return { success: false, error: 'Authentication failed. Please try again.' };
   }
 };
@@ -110,7 +131,6 @@ export const getStoredToken = async (): Promise<{ email: string } | null> => {
   try {
     const token = await getAuthToken();
     if (!token) {
-      console.log('[AuthService] No stored token found.');
       return null;
     }
 
@@ -121,14 +141,14 @@ export const getStoredToken = async (): Promise<{ email: string } | null> => {
       return null;
     }
 
-    if (Date.now() > payload.exp) {
+    if (payload.exp && Date.now() > payload.exp * 1000) {
       console.log('[AuthService] Token has expired. Clearing session.');
       await removeAuthToken();
       return null;
     }
 
-    console.log('[AuthService] Valid session found for:', payload.email);
-    return { email: payload.email };
+    const userEmail = payload.email || (payload.sub && payload.sub.includes('@') ? payload.sub : 'user@foodexpress.in');
+    return { email: userEmail };
   } catch {
     console.warn('[AuthService] Unable to restore the stored session.');
     return null;

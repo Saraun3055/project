@@ -1,23 +1,25 @@
 const express = require('express');
-const { readFavorites, writeFavorites, readDishes } = require('../dataStore');
+const Favorite = require('../models/Favorite');
+const Dish = require('../models/Dish');
+const { requireCustomer } = require('../middleware/requireCustomer');
+const { toPlain } = require('../utils/serialize');
 
 const router = express.Router();
+
+// Every favorites endpoint is scoped to the signed-in customer.
+router.use('/favorites', requireCustomer);
 
 /**
  * GET /api/favorites
  * Returns all saved favorite dishes for the current user.
- * Optionally filter by ?customerId=
  */
 router.get('/favorites', async (req, res, next) => {
   try {
-    const favorites = await readFavorites();
-    const { customerId } = req.query;
+    const favorites = await Favorite.find({ customerId: req.customer.id })
+      .sort({ savedAt: -1 })
+      .lean();
 
-    const filtered = customerId
-      ? favorites.filter((item) => item.customerId === customerId)
-      : favorites;
-
-    res.status(200).json({ favorites: filtered, count: filtered.length });
+    res.status(200).json({ favorites: favorites.map(toPlain), count: favorites.length });
   } catch (error) {
     next(error);
   }
@@ -25,41 +27,35 @@ router.get('/favorites', async (req, res, next) => {
 
 /**
  * POST /api/favorites
- * Add a dish to favorites.
- * Body: { dishId, customerId? }
+ * Add a dish to favorites. Body: { dishId }
  */
 router.post('/favorites', async (req, res, next) => {
   try {
-    const body = req.body || {};
-    const { dishId, customerId = 'u1' } = body;
-
+    const { dishId } = req.body || {};
     if (!dishId) {
       return res.status(400).json({ error: 'dishId is required.' });
     }
 
-    // Validate that the dish exists
-    const dishes = await readDishes();
-    const dish = dishes.find((item) => item.id === dishId);
+    const dish = await Dish.findOne({ id: dishId }).lean();
     if (!dish) {
       return res.status(404).json({ error: `Dish ${dishId} not found.` });
     }
 
-    const favorites = await readFavorites();
+    const existing = await Favorite.findOne({
+      customerId: req.customer.id,
+      dishId: dish.id,
+    }).lean();
 
-    // Prevent duplicate favorites for the same customer
-    const alreadySaved = favorites.some(
-      (item) => item.dishId === dishId && item.customerId === customerId
-    );
-    if (alreadySaved) {
+    if (existing) {
       return res.status(409).json({
         error: 'Dish is already in favorites.',
-        favorite: favorites.find((item) => item.dishId === dishId && item.customerId === customerId),
+        favorite: toPlain(existing),
       });
     }
 
-    const newFavorite = {
+    const favorite = await Favorite.create({
       id: `fav-${Date.now().toString(36)}`,
-      customerId,
+      customerId: req.customer.id,
       dishId: dish.id,
       dishName: dish.name,
       restaurantId: dish.restaurantId,
@@ -68,14 +64,15 @@ router.post('/favorites', async (req, res, next) => {
       healthMeterScore: dish.healthMeterScore ?? null,
       imageUrl: dish.imageUrl ?? null,
       isVeg: dish.isVeg ?? null,
-      savedAt: new Date().toISOString(),
-    };
+      savedAt: new Date(),
+    });
 
-    favorites.unshift(newFavorite);
-    await writeFavorites(favorites);
-
-    res.status(201).json({ favorite: newFavorite, total: favorites.length });
+    const total = await Favorite.countDocuments({ customerId: req.customer.id });
+    res.status(201).json({ favorite: toPlain(favorite), total });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: 'Dish is already in favorites.' });
+    }
     next(error);
   }
 });
@@ -83,28 +80,20 @@ router.post('/favorites', async (req, res, next) => {
 /**
  * DELETE /api/favorites/:dishId
  * Remove a dish from favorites.
- * Optionally scope by ?customerId=
  */
 router.delete('/favorites/:dishId', async (req, res, next) => {
   try {
-    const { dishId } = req.params;
-    const { customerId } = req.query;
-
-    const favorites = await readFavorites();
-    const before = favorites.length;
-
-    const updated = favorites.filter((item) => {
-      if (item.dishId !== dishId) return true;
-      if (customerId && item.customerId !== customerId) return true;
-      return false;
+    const result = await Favorite.deleteOne({
+      customerId: req.customer.id,
+      dishId: req.params.dishId,
     });
 
-    if (updated.length === before) {
-      return res.status(404).json({ error: `Dish ${dishId} not found in favorites.` });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: `Dish ${req.params.dishId} not found in favorites.` });
     }
 
-    await writeFavorites(updated);
-    res.status(200).json({ message: 'Removed from favorites.', total: updated.length });
+    const total = await Favorite.countDocuments({ customerId: req.customer.id });
+    res.status(200).json({ message: 'Removed from favorites.', total });
   } catch (error) {
     next(error);
   }
@@ -112,22 +101,15 @@ router.delete('/favorites/:dishId', async (req, res, next) => {
 
 /**
  * DELETE /api/favorites
- * Clear all favorites for a customer.
- * Requires ?customerId=
+ * Clear every favorite the customer has saved.
  */
 router.delete('/favorites', async (req, res, next) => {
   try {
-    const { customerId } = req.query;
-
-    if (!customerId) {
-      return res.status(400).json({ error: 'customerId query parameter is required to clear favorites.' });
-    }
-
-    const favorites = await readFavorites();
-    const updated = favorites.filter((item) => item.customerId !== customerId);
-    await writeFavorites(updated);
-
-    res.status(200).json({ message: `All favorites cleared for customer ${customerId}.`, total: updated.length });
+    const result = await Favorite.deleteMany({ customerId: req.customer.id });
+    res.status(200).json({
+      message: `All favorites cleared for customer ${req.customer.id}.`,
+      total: result.deletedCount,
+    });
   } catch (error) {
     next(error);
   }

@@ -1,8 +1,15 @@
 const express = require('express');
-const { readRestaurants } = require('../dataStore');
+const Restaurant = require('../models/Restaurant');
 const { verifyPassword, signJwt, requireRestaurant, toOwnerRestaurant } = require('../utils/authUtils');
+const { toPlain } = require('../utils/serialize');
 
 const router = express.Router();
+
+/** Snapshot of every restaurant as plain objects, for the auth guard. */
+const loadRestaurants = async () => {
+  const restaurants = await Restaurant.find().lean();
+  return restaurants.map(toPlain);
+};
 
 /**
  * POST /api/auth/restaurant/login
@@ -17,10 +24,7 @@ router.post('/auth/restaurant/login', async (req, res, next) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const restaurants = await readRestaurants();
-    const restaurant = restaurants.find(
-      (item) => String(item.email ?? '').trim().toLowerCase() === email
-    );
+    const restaurant = await Restaurant.findOne({ email }).lean();
 
     // Same message for unknown email and wrong password so the endpoint does
     // not confirm which restaurant emails exist.
@@ -46,7 +50,7 @@ router.post('/auth/restaurant/login', async (req, res, next) => {
   }
 });
 
-const auth = requireRestaurant(readRestaurants);
+const auth = requireRestaurant(loadRestaurants);
 
 /**
  * GET /api/auth/restaurant/me
@@ -58,3 +62,4 @@ router.get('/auth/restaurant/me', auth, (req, res) => {
 
 module.exports = router;
 module.exports.auth = auth;
+module.exports.loadRestaurants = loadRestaurants;

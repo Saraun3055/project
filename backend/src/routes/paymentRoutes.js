@@ -1,13 +1,14 @@
 const express = require('express');
-const { readCart, writeCart } = require('../dataStore');
+const Cart = require('../models/Cart');
+const Restaurant = require('../models/Restaurant');
 const { buildSplit, isLive, CURRENCY, PLATFORM_FEE_PER_ORDER } = require('../utils/stripeUtils');
+const { optionalCustomer } = require('../middleware/requireCustomer');
 const { placeOrder, groupItemsByRestaurant, DELIVERY_FEE_PER_RESTAURANT } = require('../services/orderService');
-const { readRestaurants } = require('../dataStore');
 
 const router = express.Router();
 
 const buildPayableGroups = async (items) => {
-  const restaurants = await readRestaurants();
+  const restaurants = await Restaurant.find().lean();
   return groupItemsByRestaurant(items).map((group) => {
     const restaurant = restaurants.find((item) => item.id === group.restaurantId);
     return {
@@ -50,41 +51,52 @@ router.post('/payments/split-preview', async (req, res, next) => {
 /**
  * POST /api/payments/checkout
  * Charges the customer once, then creates one order per restaurant and starts
- * the multi-stop delivery simulation.
+ * the multi-stop delivery simulation. Falls back to the signed-in customer's
+ * stored cart when no item list is supplied.
  */
-router.post('/payments/checkout', async (req, res, next) => {
+router.post('/payments/checkout', optionalCustomer, async (req, res, next) => {
   try {
-    const cart = await readCart();
-    const items = Array.isArray(req.body?.items) && req.body.items.length ? req.body.items : cart.items;
+    const stored = req.customer
+      ? await Cart.findOne({ customerId: req.customer.id }).lean()
+      : null;
+
+    const items = Array.isArray(req.body?.items) && req.body.items.length
+      ? req.body.items
+      : stored?.items ?? [];
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'The cart is empty.' });
     }
 
-    const deliveryFee = Number(req.body?.deliveryFee ?? cart.deliveryFee) || 0;
-    const discount = Number(req.body?.discount ?? cart.discount) || 0;
+    const deliveryFee = Number(req.body?.deliveryFee ?? stored?.deliveryFee) || 0;
+    const discount = Number(req.body?.discount ?? stored?.discount) || 0;
 
     const { transaction, orders, payment } = await placeOrder({
       items,
-      customerId: req.body?.customerId ?? cart.customerId ?? 'u1',
-      customerName: req.body?.customerName,
+      customerId: req.customer ? req.customer.id : req.body?.customerId ?? 'u1',
+      customerName: req.customer ? req.customer.name : req.body?.customerName,
       customerAddress: req.body?.customerAddress,
       deliveryFee,
       discount,
       timeScale: req.body?.timeScale,
     });
 
-    // Checkout completed: reset the server side cart.
-    const clearedCart = {
-      ...cart,
-      items: [],
-      subtotal: 0,
-      deliveryFee: 0,
-      total: 0,
-      appliedCoupon: null,
-      discount: 0,
-      finalTotal: 0,
-    };
-    await writeCart(clearedCart);
+    // Checkout completed: reset this customer's server side cart.
+    if (req.customer && stored) {
+      await Cart.updateOne(
+        { customerId: req.customer.id },
+        {
+          $set: {
+            items: [],
+            subtotal: 0,
+            deliveryFee: 0,
+            total: 0,
+            appliedCoupon: null,
+            discount: 0,
+            finalTotal: 0,
+          },
+        }
+      );
+    }
 
     res.status(201).json({
       transactionId: transaction.transactionId,

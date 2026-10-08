@@ -1,12 +1,18 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 
+const db = require('./src/db');
 const menuRoutes = require('./src/routes/menuRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const promotionRoutes = require('./src/routes/promotionRoutes');
 const cartRoutes = require('./src/routes/cartRoutes');
 const orderRoutes = require('./src/routes/orderRoutes');
 const authRoutes = require('./src/routes/authRoutes');
+const customerAuthRoutes = require('./src/routes/customerAuthRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
+const feedbackRoutes = require('./src/routes/feedbackRoutes');
 const restaurantRoutes = require('./src/routes/restaurantRoutes');
 const paymentRoutes = require('./src/routes/paymentRoutes');
 const favoritesRoutes = require('./src/routes/favoritesRoutes');
@@ -28,6 +34,7 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     service: 'FoodExpress API',
+    database: db.isConnected() ? 'mongodb' : 'disconnected',
     payments: stripeIsLive() ? 'stripe-connect-live' : 'stripe-connect-simulated',
   });
 });
@@ -38,6 +45,9 @@ app.use('/api', promotionRoutes);
 app.use('/api', cartRoutes);
 app.use('/api', orderRoutes);
 app.use('/api', authRoutes);
+app.use('/api', customerAuthRoutes);
+app.use('/api', adminRoutes);
+app.use('/api', feedbackRoutes);
 app.use('/api', restaurantRoutes);
 app.use('/api', paymentRoutes);
 app.use('/api', favoritesRoutes);
@@ -54,6 +64,10 @@ app.use((req, res) => {
       'GET  /api/categories',
       'GET  /api/users/profile',
       'PUT  /api/users/profile',
+      'GET  /api/users/addresses',
+      'POST /api/users/addresses',
+      'PUT  /api/users/addresses/:idx',
+      'DEL  /api/users/addresses/:idx',
       'GET  /api/promotions',
       'GET  /api/cart',
       'POST /api/cart',
@@ -71,8 +85,21 @@ app.use((req, res) => {
       'POST /api/favorites',
       'DEL  /api/favorites/:dishId',
       'DEL  /api/favorites',
+      'POST /api/auth/register',
+      'POST /api/auth/login',
+      'GET  /api/auth/me',
       'POST /api/auth/restaurant/login',
       'GET  /api/auth/restaurant/me',
+      'GET  /api/admin/dishes',
+      'POST /api/admin/dishes',
+      'PUT  /api/admin/dishes/:id',
+      'DEL  /api/admin/dishes/:id',
+      'GET  /api/admin/categories',
+      'POST /api/admin/categories',
+      'PUT  /api/admin/categories/:id',
+      'DEL  /api/admin/categories/:id',
+      'POST /api/feedback',
+      'GET  /api/feedback',
       'GET  /api/restaurant/orders',
       'PATCH /api/restaurant/orders/:orderId',
       'GET  /api/restaurant/stats',
@@ -88,6 +115,22 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: 'Internal server error.', details: error.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`FoodExpress backend running on http://localhost:${PORT}`);
-});
+const start = async () => {
+  try {
+    await db.connect();
+  } catch (error) {
+    console.error('[MongoDB] Connection failed:', error.message);
+    console.error('Start MongoDB locally, then run: npm run seed');
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`FoodExpress backend running on http://localhost:${PORT}`);
+  });
+};
+
+if (require.main === module) {
+  start();
+}
+
+module.exports = { app, start };

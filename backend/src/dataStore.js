@@ -31,6 +31,8 @@ const readJsonFileOrDefault = async (fileName, fallback) => {
 };
 
 module.exports = {
+  // Exposed for the seed script, which needs arbitrary access to `data/`.
+  readJsonFile,
   readDishes: () => readJsonFile('dishes.json'),
   readCategories: () => readJsonFile('categories.json'),
   readRestaurants: () => readJsonFile('restaurants.json'),
